@@ -1,0 +1,130 @@
+[
+  {
+    "context_id": 1,
+    "file_name": "pom.xml",
+    "chunk_index": 0,
+    "content": "# pom.xml\nFile Type: .xml\n\n<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<project xmlns=\"http://maven.apache.org/POM/4.0.0\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"\n         xsi:schemaLocation=\"http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd\">\n    <modelVersion>4.0.0</modelVersion>\n\n    <parent>\n        <groupId>org.springframework.boot</groupId>\n        <artifactId>spring-boot-starter-parent</artifactId>\n        <version>2.7.18</version>\n    </parent>\n\n    <groupId>com.example</groupId>\n    <artifactId>spring-boot-2-hello-world</artifactId>\n    <version>1.0.2-SNAPSHOT</version>\n\n    <name>spring-boot-2-hello-world</name>\n    <description>A simple Spring Boot 2.x app to send hello world message to a user</description>\n\n    <properties>\n        <java.version>1.8</java.version>\n    </properties>\n\n    <dependencies>\n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter</artifactId>\n        </dependency>\n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter-web</artifactId>\n        </dependency>\n\n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter-test</artifactId>\n            <scope>test</scope>\n        </dependency>\n    </dependencies>",
+    "metadata": {
+      "file_path": "pom.xml",
+      "file_type": ".xml",
+      "language": "unknown",
+      "chunk_size": 1391,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BuntyRaghani/spring-boot-hello-world.git",
+      "repository_branch": "main",
+      "project_type": "Java/Maven"
+    }
+  },
+  {
+    "context_id": 1,
+    "file_name": "pom.xml",
+    "chunk_index": 1,
+    "content": ">\n            <artifactId>spring-boot-starter-web</artifactId>\n        </dependency>\n\n        <dependency>\n            <groupId>org.springframework.boot</groupId>\n            <artifactId>spring-boot-starter-test</artifactId>\n            <scope>test</scope>\n        </dependency>\n    </dependencies>\n\n    <build>\n        <plugins>\n            <plugin>\n                <groupId>org.springframework.boot</groupId>\n                <artifactId>spring-boot-maven-plugin</artifactId>\n            </plugin>\n        </plugins>\n    </build>\n\n</project>",
+    "metadata": {
+      "file_path": "pom.xml",
+      "file_type": ".xml",
+      "language": "unknown",
+      "chunk_size": 542,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BuntyRaghani/spring-boot-hello-world.git",
+      "repository_branch": "main",
+      "project_type": "Java/Maven"
+    }
+  },
+  {
+    "context_id": 1,
+    "file_name": "README.md",
+    "chunk_index": 0,
+    "content": "# Markdown Document: README.md\n\n# Spring Boot Hello World\n\n**A simple Spring Boot 2.x app to send hello world message to a user**\n\n## How to Run Application\n\n**Start the application using any of the commands mentioned below**\n\n> **Note:** First two commands need to run inside the root folder of this project i.e inside the **spring-boot-hello-world** folder\n\n\n- **Using maven** <br/>``` mvn spring-boot:run```\n\n\n- **From jar file**\n  Create a jar file using '**mvn clean install**' command and then execute\n  <br/>```java -jar target/spring-boot-2-hello-world-1.0.2-SNAPSHOT.jar```\n\n\n- **Directly from IDE**\n  <br/>```Right click on HelloWorldApplication.java and click on 'Run' option```\n  <br/><br/>\n\n> **Note:** By default spring boot application starts on port number 8080. If port 8080 is occupied in your system then you can change the port number by uncommenting and updating the **server.port** property inside the **application.properties** file that is available inside the **src > main > resources** folder.\n\n<br/>\n\n**Send an HTTP GET request to '/hello' endpoint using any of the two methods**\n\n- **Browser or REST client**\n  <br/>```http://localhost:8080/hello```\n\n\n- **cURL**\n  <br/>```curl --request GET 'http://localhost:8080/hello'```\n\n",
+    "metadata": {
+      "file_path": "README.md",
+      "file_type": ".md",
+      "language": "unknown",
+      "chunk_size": 1254,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BuntyRaghani/spring-boot-hello-world.git",
+      "repository_branch": "main",
+      "project_type": "Java/Maven"
+    }
+  },
+  {
+    "context_id": 1,
+    "file_name": "README.md",
+    "chunk_index": 1,
+    "content": "## How to Run Unit Test Cases\n\n**Run the test cases using any of the commands mentioned below**\n\n> **Note:** These commands need to run inside the root folder of this project i.e inside the **spring-boot-hello-world** folder\n\n- **To run all the test cases**\n  <br/>```mvn test```\n\n\n- **To run a particular test class**\n  <br/>```mvn -Dtest=HelloWorldControllerTest test```\n  <br/>or\n  <br/>```mvn -Dtest=HelloWorldApplicationTests test```",
+    "metadata": {
+      "file_path": "README.md",
+      "file_type": ".md",
+      "language": "unknown",
+      "chunk_size": 438,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BuntyRaghani/spring-boot-hello-world.git",
+      "repository_branch": "main",
+      "project_type": "Java/Maven"
+    }
+  },
+  {
+    "context_id": 1,
+    "file_name": "src\\main\\java\\com\\example\\helloworld\\HelloWorldApplication.java",
+    "chunk_index": 0,
+    "content": "# Java File: HelloWorldApplication.java\n\n## Class: public class HelloWorldApplication {\n## Method: public static void main(String[] args) {\n\n## Full Code:\n```java\npackage com.example.helloworld;\n\nimport org.springframework.boot.SpringApplication;\nimport org.springframework.boot.autoconfigure.SpringBootApplication;\n\n@SpringBootApplication\npublic class HelloWorldApplication {\n\n    public static void main(String[] args) {\n        SpringApplication.run(HelloWorldApplication.class, args);\n    }\n\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\java\\com\\example\\helloworld\\HelloWorldApplication.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 502,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BuntyRaghani/spring-boot-hello-world.git",
+      "repository_branch": "main",
+      "project_type": "Java/Maven"
+    }
+  },
+  {
+    "context_id": 1,
+    "file_name": "src\\main\\java\\com\\example\\helloworld\\controller\\HelloWorldController.java",
+    "chunk_index": 0,
+    "content": "# Java File: HelloWorldController.java\n\n## Class: public class HelloWorldController {\n## Method: public String sendGreetings() {\n\n## Full Code:\n```java\npackage com.example.helloworld.controller;\n\nimport org.springframework.web.bind.annotation.GetMapping;\nimport org.springframework.web.bind.annotation.RestController;\n\n@RestController\npublic class HelloWorldController {\n\n    @GetMapping(\"/hello\")\n    public String sendGreetings() {\n        return \"Hello, World!\";\n    }\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\java\\com\\example\\helloworld\\controller\\HelloWorldController.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 478,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BuntyRaghani/spring-boot-hello-world.git",
+      "repository_branch": "main",
+      "project_type": "Java/Maven"
+    }
+  },
+  {
+    "context_id": 1,
+    "file_name": "src\\test\\java\\com\\example\\helloworld\\HelloWorldApplicationTests.java",
+    "chunk_index": 0,
+    "content": "# Java File: HelloWorldApplicationTests.java\n\n## Documentation: // to ensure that controller is getting created inside the application context\n\n## Full Code:\n```java\npackage com.example.helloworld;\n\nimport com.example.helloworld.controller.HelloWorldController;\nimport org.junit.jupiter.api.Test;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.test.context.SpringBootTest;\n\nimport static org.junit.jupiter.api.Assertions.assertNotNull;\n\n\n@SpringBootTest\nclass HelloWorldApplicationTests {\n\n    @Autowired\n    private HelloWorldController helloWorldController;\n\n    @Test\n    void contextLoads() {\n        // to ensure that controller is getting created inside the application context\n        assertNotNull(helloWorldController);\n    }\n\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\test\\java\\com\\example\\helloworld\\HelloWorldApplicationTests.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 790,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BuntyRaghani/spring-boot-hello-world.git",
+      "repository_branch": "main",
+      "project_type": "Java/Maven"
+    }
+  },
+  {
+    "context_id": 1,
+    "file_name": "src\\test\\java\\com\\example\\helloworld\\controller\\HelloWorldControllerTest.java",
+    "chunk_index": 0,
+    "content": "# Java File: HelloWorldControllerTest.java\n\n## Class: public class HelloWorldControllerTest {\n## Method: public void shouldReturnExpectedMessage() throws Exception {\n\n## Full Code:\n```java\npackage com.example.helloworld.controller;\n\nimport org.junit.jupiter.api.Test;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;\nimport org.springframework.boot.test.context.SpringBootTest;\nimport org.springframework.test.web.servlet.MockMvc;\n\nimport static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;\nimport static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;\nimport static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;\n\n@SpringBootTest\n@AutoConfigureMockMvc\npublic class HelloWorldControllerTest {\n\n    @Autowired\n    private MockMvc mockMvc;\n\n    @Test\n    public void shouldReturnExpectedMessage() throws Exception {\n\n        mockMvc.perform(get(\"/hello\"))\n                .andExpect(status().isOk())\n                .andExpect(content().string(\"Hello, World!\"));\n    }\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\test\\java\\com\\example\\helloworld\\controller\\HelloWorldControllerTest.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 1154,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BuntyRaghani/spring-boot-hello-world.git",
+      "repository_branch": "main",
+      "project_type": "Java/Maven"
+    }
+  }
+]

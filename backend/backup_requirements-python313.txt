@@ -1,0 +1,58 @@
+# Python 3.13 Compatible Requirements
+# Core Flask dependencies
+Flask>=3.0.0
+Flask-SQLAlchemy>=3.1.1
+Flask-CORS>=4.0.0
+Flask-JWT-Extended>=4.6.0
+Flask-Migrate>=4.0.5
+
+# Database
+SQLAlchemy>=2.0.25
+psycopg2-binary>=2.9.9
+
+# Document processing (basic)
+python-docx>=1.1.0
+openpyxl>=3.1.2
+pandas>=2.1.4
+
+# Vector storage and embeddings
+numpy>=1.24.4
+sentence-transformers>=2.2.2
+
+# Try faiss-cpu, fallback to manual installation if needed
+faiss-cpu>=1.7.4
+
+# LLM integration
+google-generativeai>=0.3.2
+openai>=1.6.1
+
+# OAuth and authentication
+requests>=2.31.0
+
+# Utilities
+python-dotenv>=1.0.0
+gunicorn>=21.2.0
+
+# Development
+pytest>=7.4.3
+black>=23.11.0
+flake8>=6.1.0
+
+# Performance monitoring
+psutil>=5.9.0
+
+# Additional Flask dependencies
+werkzeug>=3.0.0
+click>=8.1.0
+itsdangerous>=2.1.0
+jinja2>=3.1.0
+markupsafe>=2.1.0
+
+# JSON handling
+simplejson>=3.19.0
+
+# Date/time handling
+python-dateutil>=2.8.2
+
+# HTTP client
+urllib3>=2.0.0

@@ -1,0 +1,49 @@
+# Working Requirements for RAG Chatbot (Python 3.10+)
+# Tested and confirmed working
+
+# Core Flask dependencies
+Flask>=3.0.0
+Flask-SQLAlchemy>=3.1.1
+Flask-CORS>=4.0.0
+Flask-JWT-Extended>=4.6.0
+SQLAlchemy>=2.0.25
+
+# Basic utilities
+python-dotenv>=1.0.0
+requests>=2.31.0
+werkzeug>=3.0.0
+click>=8.1.0
+itsdangerous>=2.1.0
+jinja2>=3.1.0
+markupsafe>=2.1.0
+
+# Data processing (with NumPy 1.x for compatibility)
+numpy<2.0,>=1.24.4
+pandas>=2.1.4
+python-docx>=1.1.0
+openpyxl>=3.1.2
+
+# AI/ML dependencies
+google-generativeai>=0.3.2
+openai>=1.6.1
+sentence-transformers>=2.2.2
+faiss-cpu>=1.7.4
+
+# Document processing
+PyMuPDF>=1.23.8
+
+# System monitoring
+psutil>=5.9.0
+
+# Development tools
+pytest>=7.4.3
+black>=23.11.0
+flake8>=6.1.0
+
+# Production server
+gunicorn>=21.2.0
+
+# Additional utilities
+python-dateutil>=2.8.2
+urllib3>=2.0.0
+simplejson>=3.19.0

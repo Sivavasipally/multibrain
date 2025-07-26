@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Icon Test</title>
+</head>
+<body>
+    <h1>Material-UI Icon Test</h1>
+    <p>Testing if Storage icon (used as DatabaseIcon) is available...</p>
+    
+    <script type="module">
+        try {
+            // Test if Storage icon can be imported
+            const { Storage } = await import('@mui/icons-material');
+            document.body.innerHTML += '<p style="color: green;">✅ Storage icon imported successfully!</p>';
+        } catch (error) {
+            document.body.innerHTML += `<p style="color: red;">❌ Storage icon import failed: ${error.message}</p>`;
+        }
+        
+        try {
+            // Test if Database icon exists (it shouldn't)
+            const { Database } = await import('@mui/icons-material');
+            document.body.innerHTML += '<p style="color: orange;">⚠️ Database icon exists (unexpected)</p>';
+        } catch (error) {
+            document.body.innerHTML += '<p style="color: green;">✅ Database icon correctly not found (expected)</p>';
+        }
+    </script>
+</body>
+</html>
