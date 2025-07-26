@@ -643,6 +643,148 @@ tar -czf /backups/files_$(date +%Y%m%d).tar.gz uploads/ vector_stores/
 
 ---
 
-**Deployment Guide Version**: 1.0  
-**Last Updated**: 2024-01-01  
+---
+
+## 🔧 **Troubleshooting Deployment Issues**
+
+### **Common Issues & Solutions**
+
+#### **Database Connection Issues**
+```bash
+# Error: "could not connect to server"
+# Check database status
+sudo systemctl status postgresql
+
+# Test connection
+psql -h localhost -U ragchatbot -d ragchatbot
+
+# Check firewall
+sudo ufw status
+```
+
+#### **Permission Issues**
+```bash
+# Fix file permissions
+sudo chown -R ragchatbot:ragchatbot /app
+sudo chmod -R 755 /app
+sudo chmod -R 777 /app/uploads
+```
+
+#### **Memory Issues**
+```bash
+# Check memory usage
+free -h
+htop
+
+# Increase swap if needed
+sudo fallocate -l 2G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+### **Performance Tuning**
+
+#### **Gunicorn Configuration**
+```python
+# gunicorn.conf.py
+bind = "0.0.0.0:5000"
+workers = 4
+worker_class = "sync"
+worker_connections = 1000
+timeout = 120
+keepalive = 2
+max_requests = 1000
+max_requests_jitter = 100
+preload_app = True
+```
+
+#### **Database Connection Pooling**
+```python
+# Database pool configuration
+SQLALCHEMY_ENGINE_OPTIONS = {
+    'pool_size': 10,
+    'pool_recycle': 3600,
+    'pool_pre_ping': True,
+    'max_overflow': 20
+}
+```
+
+---
+
+## 📈 **Scaling Strategies**
+
+### **Horizontal Scaling**
+```yaml
+# docker-compose.scale.yml
+version: '3.8'
+services:
+  backend:
+    deploy:
+      replicas: 3
+    ports:
+      - "5000-5002:5000"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+```
+
+### **Auto-Scaling (AWS)**
+```bash
+# Create Auto Scaling Group
+aws autoscaling create-auto-scaling-group \
+    --auto-scaling-group-name ragchatbot-asg \
+    --launch-template LaunchTemplateName=ragchatbot-template \
+    --min-size 1 \
+    --max-size 10 \
+    --desired-capacity 2 \
+    --target-group-arns arn:aws:elasticloadbalancing:region:account:targetgroup/ragchatbot/id
+```
+
+---
+
+## 🔍 **Monitoring & Alerting**
+
+### **Prometheus Configuration**
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'ragchatbot'
+    static_configs:
+      - targets: ['localhost:5000']
+    metrics_path: '/api/metrics'
+```
+
+### **Grafana Dashboard**
+```json
+{
+  "dashboard": {
+    "title": "RAG Chatbot Monitoring",
+    "panels": [
+      {
+        "title": "Response Time",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "http_request_duration_seconds",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+**Deployment Guide Version**: 1.0
+**Last Updated**: 2024-01-01
 **Supported Platforms**: AWS, GCP, Heroku, Docker, Ubuntu/CentOS
