@@ -37,10 +37,11 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => {
     // Only load data when user is authenticated and token is available
-    if (user && token) {
+    // Use a ref to prevent loops when user/token objects change but values are same
+    if (user?.id && token) {
       loadDashboardData();
     }
-  }, [user, token]);
+  }, [user?.id, token]); // Only depend on user ID, not entire user object
 
   const loadDashboardData = async () => {
     try {

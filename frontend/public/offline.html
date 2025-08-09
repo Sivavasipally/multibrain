@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <meta name="description" content="RAG Chatbot - Offline Mode" />
+    
+    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
+    <link rel="manifest" href="/manifest.json" />
+    
+    <title>Offline - RAG Chatbot</title>
+    
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+          'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #333;
+        text-align: center;
+        padding: 20px;
+      }
+      
+      .container {
+        background: white;
+        padding: 3rem 2rem;
+        border-radius: 16px;
+        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+        max-width: 600px;
+        width: 100%;
+        margin: 1rem;
+      }
+      
+      .icon {
+        font-size: 5rem;
+        margin-bottom: 1.5rem;
+        line-height: 1;
+      }
+      
+      h1 {
+        color: #333;
+        margin-bottom: 1rem;
+        font-size: 2.5rem;
+        font-weight: 600;
+      }
+      
+      .subtitle {
+        color: #666;
+        margin-bottom: 2rem;
+        line-height: 1.6;
+        font-size: 1.1rem;
+      }
+      
+      .features {
+        background: #f8f9fa;
+        border-radius: 12px;
+        padding: 1.5rem;
+        margin: 2rem 0;
+        text-align: left;
+      }
+      
+      .features h3 {
+        color: #333;
+        margin-bottom: 1rem;
+        text-align: center;
+      }
+      
+      .feature-list {
+        list-style: none;
+        padding: 0;
+      }
+      
+      .feature-list li {
+        padding: 0.5rem 0;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      
+      .feature-list li::before {
+        content: '✓';
+        color: #4caf50;
+        font-weight: bold;
+        font-size: 1.2rem;
+      }
+      
+      .actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+        margin-top: 2rem;
+      }
+      
+      button {
+        background: #1976d2;
+        color: white;
+        border: none;
+        padding: 0.875rem 1.5rem;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 500;
+        transition: all 0.2s;
+        min-width: 120px;
+      }
+      
+      button:hover {
+        background: #1565c0;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+      }
+      
+      button:active {
+        transform: translateY(0);
+      }
+      
+      .secondary {
+        background: #f5f5f5;
+        color: #333;
+      }
+      
+      .secondary:hover {
+        background: #eeeeee;
+      }
+      
+      .status {
+        margin-top: 2rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        font-size: 0.875rem;
+      }
+      
+      .status-indicator {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-right: 8px;
+        background-color: #f44336;
+      }
+      
+      .status-indicator.online {
+        background-color: #4caf50;
+      }
+      
+      .progress {
+        display: none;
+        margin-top: 1rem;
+      }
+      
+      .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: #e0e0e0;
+        border-radius: 2px;
+        overflow: hidden;
+      }
+      
+      .progress-fill {
+        height: 100%;
+        background: #1976d2;
+        animation: indeterminate 1.5s infinite linear;
+        transform-origin: 0% 50%;
+      }
+      
+      @keyframes indeterminate {
+        0% {
+          transform: translateX(0) scaleX(0);
+        }
+        40% {
+          transform: translateX(0) scaleX(0.4);
+        }
+        100% {
+          transform: translateX(100%) scaleX(0.5);
+        }
+      }
+      
+      .app-info {
+        margin-top: 2rem;
+        padding-top: 1rem;
+        border-top: 1px solid #e0e0e0;
+        color: #666;
+        font-size: 0.875rem;
+      }
+      
+      .app-logo {
+        width: 48px;
+        height: 48px;
+        margin: 0 auto 1rem;
+        background: #1976d2;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+        font-size: 1.2rem;
+      }
+      
+      @media (max-width: 600px) {
+        .container {
+          padding: 2rem 1.5rem;
+        }
+        
+        h1 {
+          font-size: 2rem;
+        }
+        
+        .actions {
+          flex-direction: column;
+        }
+        
+        button {
+          width: 100%;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="app-logo">RC</div>
+      <div class="icon">📱</div>
+      <h1>You're Offline</h1>
+      <p class="subtitle">
+        No worries! The RAG Chatbot works offline too. Your conversations and data are cached locally and will sync when you're back online.
+      </p>
+      
+      <div class="features">
+        <h3>Available Offline</h3>
+        <ul class="feature-list">
+          <li>Continue existing conversations</li>
+          <li>Browse cached contexts and documents</li>
+          <li>Search through your chat history</li>
+          <li>Create new conversations (will sync later)</li>
+          <li>Access user preferences and settings</li>
+        </ul>
+      </div>
+      
+      <div class="actions">
+        <button onclick="tryReconnect()">Check Connection</button>
+        <button class="secondary" onclick="goToApp()">Continue Offline</button>
+        <button class="secondary" onclick="showOfflinePage()">Offline Features</button>
+      </div>
+      
+      <div class="progress" id="progress">
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+      </div>
+      
+      <div class="status">
+        <span class="status-indicator" id="status-indicator"></span>
+        <span id="status-text">Offline Mode</span>
+        <div style="margin-top: 0.5rem; font-size: 0.75rem; color: #999;">
+          Last updated: <span id="timestamp">${new Date().toLocaleString()}</span>
+        </div>
+      </div>
+      
+      <div class="app-info">
+        <strong>RAG Chatbot PWA</strong><br>
+        Intelligent document chat with offline support
+      </div>
+    </div>
+    
+    <script>
+      let checkingConnection = false;
+      
+      function updateStatus() {
+        const indicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const progress = document.getElementById('progress');
+        
+        if (navigator.onLine) {
+          indicator.className = 'status-indicator online';
+          statusText.textContent = 'Back Online! Redirecting...';
+          
+          if (!checkingConnection) {
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 1000);
+          }
+        } else {
+          indicator.className = 'status-indicator';
+          statusText.textContent = 'Offline Mode';
+          progress.style.display = 'none';
+        }
+      }
+      
+      function tryReconnect() {
+        if (checkingConnection) return;
+        
+        checkingConnection = true;
+        const progress = document.getElementById('progress');
+        const statusText = document.getElementById('status-text');
+        
+        progress.style.display = 'block';
+        statusText.textContent = 'Checking connection...';
+        
+        // Simulate connection check
+        setTimeout(() => {
+          if (navigator.onLine) {
+            statusText.textContent = 'Connection restored! Redirecting...';
+            setTimeout(() => {
+              window.location.href = '/';
+            }, 1000);
+          } else {
+            statusText.textContent = 'Still offline. Try again later.';
+            progress.style.display = 'none';
+            checkingConnection = false;
+          }
+        }, 2000);
+      }
+      
+      function goToApp() {
+        window.location.href = '/';
+      }
+      
+      function showOfflinePage() {
+        window.location.href = '/offline';
+      }
+      
+      // Check connection status every 5 seconds
+      setInterval(updateStatus, 5000);
+      
+      // Initial status update
+      updateStatus();
+      
+      // Listen for online/offline events
+      window.addEventListener('online', () => {
+        updateStatus();
+        setTimeout(() => {
+          if (navigator.onLine) {
+            window.location.href = '/';
+          }
+        }, 1000);
+      });
+      
+      window.addEventListener('offline', updateStatus);
+      
+      // Update timestamp
+      document.getElementById('timestamp').textContent = new Date().toLocaleString();
+      
+      // Prevent form submissions and links that won't work offline
+      document.addEventListener('click', (e) => {
+        const target = e.target;
+        if (target.tagName === 'A' && target.href && !navigator.onLine) {
+          e.preventDefault();
+          alert('This link requires an internet connection.');
+        }
+      });
+      
+      // Service worker message handling
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          const { type, data } = event.data;
+          
+          if (type === 'NETWORK_STATUS_UPDATE') {
+            if (data.isOnline) {
+              updateStatus();
+            }
+          }
+        });
+      }
+      
+      // Keyboard shortcuts
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'r' && (e.ctrlKey || e.metaKey)) {
+          e.preventDefault();
+          tryReconnect();
+        } else if (e.key === 'h') {
+          e.preventDefault();
+          goToApp();
+        } else if (e.key === 'o') {
+          e.preventDefault();
+          showOfflinePage();
+        }
+      });
+      
+      console.log('%c🚀 RAG Chatbot Offline Mode', 'color: #1976d2; font-size: 16px; font-weight: bold;');
+      console.log('Available keyboard shortcuts:');
+      console.log('- Ctrl/Cmd + R: Check connection');
+      console.log('- H: Go to app home');
+      console.log('- O: Show offline features');
+    </script>
+  </body>
+</html>

@@ -20,8 +20,9 @@ def init_database():
             print("Creating new tables...")
             db.create_all()
             
-            # Verify tables were created
+            # Verify tables were created (including versioning tables)
             from models import User, Context, Document, ChatSession, Message, TextChunk
+            from context_versioning import ContextVersion, ContextVersionDiff, VersionTag
             
             # Test that we can create a simple context
             print("Testing Context model...")

@@ -1,0 +1,18 @@
+{
+  "chunks": [
+    {
+      "content": "Document: Client_Connect.docx\nFile Type: .docx\nFile Size: 22,336 bytes\nCategory: document\n\nThis .docx file contains structured or binary data that requires specialized processing.\nIn a full production implementation, this would be processed using:\n- PDF processors (PyMuPDF, pdfplumber) for PDF files\n- Office document parsers (python-docx, openpyxl) for Office files\n- Specialized parsers for other binary formats\n\nThe file is available for download and manual review if needed.",
+      "source": "Client_Connect.docx",
+      "chunk_index": 0,
+      "context_id": 3,
+      "metadata": {
+        "file_name": "Client_Connect.docx",
+        "file_type": "document",
+        "chunk_index": 0
+      }
+    }
+  ],
+  "embedding_model": "text-embedding-004",
+  "dimension": 768,
+  "total_chunks": 1
+}

@@ -1,0 +1,203 @@
+# Docker Compose for RAG Chatbot PWA - Staging Environment
+# Staging environment with production-like setup but with dev-friendly features
+
+version: '3.8'
+
+services:
+  # Nginx reverse proxy (staging)
+  nginx:
+    image: nginx:alpine
+    container_name: ragchatbot-nginx-staging
+    ports:
+      - "8080:80"
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.staging.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+      - frontend_build:/usr/share/nginx/html
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - ragchatbot-network
+    restart: unless-stopped
+    environment:
+      - NGINX_ENVSUBST_TEMPLATE_DIR=/etc/nginx/templates
+      - DOMAIN=${DOMAIN:-staging.local}
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend build (staging)
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../docker/Dockerfile.frontend.prod
+      args:
+        - NODE_ENV=staging
+        - VITE_API_URL=${API_URL:-http://localhost:8080/api}
+        - VITE_APP_NAME=RAG Chatbot PWA (Staging)
+        - VITE_ENABLE_DEBUG=true
+    container_name: ragchatbot-frontend-staging
+    volumes:
+      - frontend_build:/app/dist
+    networks:
+      - ragchatbot-network
+    restart: "no"
+
+  # Backend API (staging)
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.backend.prod
+    container_name: ragchatbot-backend-staging
+    ports:
+      - "5001:5000"  # Expose for direct access in staging
+    environment:
+      - FLASK_ENV=staging
+      - DATABASE_URL=postgresql://raguser:${POSTGRES_PASSWORD}@postgres:5432/ragchatbot_staging
+      - REDIS_URL=redis://redis:6379/1
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+      - UPLOAD_FOLDER=/app/uploads
+      - MAX_CONTENT_LENGTH=${MAX_UPLOAD_SIZE:-104857600}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:8080}
+      - LOG_LEVEL=DEBUG
+      - ENABLE_DEBUG_TOOLBAR=true
+    volumes:
+      - uploads_data:/app/uploads
+      - vector_data:/app/vector_store
+      - logs_data:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ragchatbot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Celery worker (staging)
+  celery:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.backend.prod
+    container_name: ragchatbot-celery-staging
+    command: celery -A app.celery worker --loglevel=debug --concurrency=2
+    environment:
+      - FLASK_ENV=staging
+      - DATABASE_URL=postgresql://raguser:${POSTGRES_PASSWORD}@postgres:5432/ragchatbot_staging
+      - REDIS_URL=redis://redis:6379/1
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - UPLOAD_FOLDER=/app/uploads
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - uploads_data:/app/uploads
+      - vector_data:/app/vector_store
+      - logs_data:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ragchatbot-network
+    restart: unless-stopped
+
+  # PostgreSQL database (staging)
+  postgres:
+    image: postgres:15-alpine
+    container_name: ragchatbot-postgres-staging
+    ports:
+      - "5433:5432"  # Different port for staging
+    environment:
+      - POSTGRES_DB=ragchatbot_staging
+      - POSTGRES_USER=raguser
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data_staging:/var/lib/postgresql/data
+      - ./postgres/init-staging.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - ragchatbot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragchatbot_staging"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis cache (staging)
+  redis:
+    image: redis:7-alpine
+    container_name: ragchatbot-redis-staging
+    ports:
+      - "6380:6379"  # Different port for staging
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-staging123}
+    volumes:
+      - redis_data_staging:/data
+    networks:
+      - ragchatbot-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Development tools container
+  devtools:
+    build:
+      context: ../backend
+      dockerfile: ../docker/Dockerfile.devtools
+    container_name: ragchatbot-devtools
+    volumes:
+      - ../:/workspace
+      - uploads_data:/workspace/uploads
+      - vector_data:/workspace/vector_store
+      - logs_data:/workspace/logs
+    environment:
+      - DATABASE_URL=postgresql://raguser:${POSTGRES_PASSWORD}@postgres:5432/ragchatbot_staging
+      - REDIS_URL=redis://redis:6379/1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ragchatbot-network
+    profiles:
+      - devtools
+    command: tail -f /dev/null  # Keep container running
+
+volumes:
+  postgres_data_staging:
+    driver: local
+  redis_data_staging:
+    driver: local
+  uploads_data:
+    driver: local
+  vector_data:
+    driver: local
+  frontend_build:
+    driver: local
+  logs_data:
+    driver: local
+
+networks:
+  ragchatbot-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.21.0.0/16

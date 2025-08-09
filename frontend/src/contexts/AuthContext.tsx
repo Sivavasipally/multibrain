@@ -39,16 +39,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
+    
     // Check for stored token on app start
-    const storedToken = localStorage.getItem('token');
-    if (storedToken) {
-      setToken(storedToken);
-      // Verify token and get user info
-      fetchUserProfile(storedToken);
-    } else {
-      setLoading(false);
-    }
-  }, []);
+    const initializeAuth = async () => {
+      const storedToken = localStorage.getItem('token');
+      
+      if (storedToken && mounted) {
+        setToken(storedToken);
+        // Verify token and get user info
+        await fetchUserProfile(storedToken);
+      } else if (mounted) {
+        setLoading(false);
+      }
+    };
+    
+    initializeAuth();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty dependency array - only run once
 
   const fetchUserProfile = async (authToken: string) => {
     try {
@@ -59,6 +70,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Token might be invalid, remove it
       localStorage.removeItem('token');
       setToken(null);
+      setUser(null);
     } finally {
       setLoading(false);
     }

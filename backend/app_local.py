@@ -1,6 +1,39 @@
 """
 Local development version of the RAG Chatbot PWA
 Simplified setup without Docker, Redis, or complex dependencies
+
+This module provides a complete Flask application for local development with:
+- SQLite database for data storage
+- JWT authentication for secure API access
+- CORS enabled for frontend integration
+- Comprehensive logging and monitoring
+- File upload and document processing
+- Vector search with FAISS
+- RAG (Retrieval-Augmented Generation) chat functionality
+- Admin dashboard for system management
+
+Features:
+- Multi-format document processing (PDF, DOCX, TXT, etc.)
+- Context-based knowledge management
+- Real-time chat with streaming responses
+- User authentication and authorization
+- Security middleware with rate limiting
+- Comprehensive error handling and logging
+- Health checks and system monitoring
+
+Usage:
+    python app_local.py
+
+Environment Variables:
+    JWT_SECRET_KEY: Secret key for JWT token generation
+    DATABASE_URL: Database connection string (default: SQLite)
+    LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR)
+    GEMINI_API_KEY: Google Gemini API key for LLM functionality
+    UPLOAD_FOLDER: Directory for file uploads (default: uploads)
+    MAX_CONTENT_LENGTH: Maximum file upload size (default: 16MB)
+
+Author: RAG Chatbot Development Team
+Version: 1.0.0
 """
 
 import os
@@ -18,10 +51,27 @@ import mimetypes
 
 # Load environment variables
 from dotenv import load_dotenv
+
+# Setup logging first
+from logging_config import setup_logging, get_logger, log_request_info, log_error_with_context
+
+# Initialize logging
+loggers = setup_logging(
+    log_level=os.getenv('LOG_LEVEL', 'INFO'),
+    console_output=True,
+    json_format=False
+)
+
+# Get application logger
+app_logger = get_logger('app')
+
+# Import security middleware
+from security_middleware import SecurityMiddleware
 load_dotenv()
 
 # Create Flask app
 app = Flask(__name__)
+app.url_map.strict_slashes = False
 
 # Configuration
 import secrets
@@ -34,162 +84,520 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 app.config['UPLOAD_FOLDER'] = os.getenv('UPLOAD_FOLDER', 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = int(os.getenv('MAX_CONTENT_LENGTH', '104857600'))  # 100MB
 
-# Import models and use their db instance
-from models import db, User, Context, Document, ChatSession, Message, TextChunk
+# Import database and models
+from database import db
+from models import User, Context, Document, ChatSession, Message, TextChunk
 
 # Initialize the db with the app
 db.init_app(app)
 
 # Initialize other extensions
 jwt = JWTManager(app)
-CORS(app, origins=[
-    os.getenv('FRONTEND_URL', 'http://localhost:5173'),
-    'http://localhost:5173',
-    'http://localhost:5174'
-])
+CORS(app)
+
+# Add global CORS headers to all responses
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Origin', '*')
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
+    return response
+
+# Add a global OPTIONS handler for any route that might be missing one
+@app.before_request
+def handle_preflight():
+    if request.method == "OPTIONS":
+        from flask import make_response
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
+        return response
+
+# Initialize security middleware
+security_middleware = SecurityMiddleware(app)
+app_logger.info("Flask application initialized with security middleware")
 
 # Create upload folder
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# Add a simple CORS test endpoint
+@app.route('/api/cors-test', methods=['GET', 'POST', 'OPTIONS'])
+def cors_test():
+    """Test endpoint to verify CORS is working"""
+    if request.method == 'OPTIONS':
+        from flask import make_response
+        response = make_response()
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
+        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
+        return response
+    return jsonify({'message': 'CORS is working!', 'method': request.method})
+
 # Helper function to get user ID as integer from JWT
 def get_current_user_id():
-    """Get the current user ID as an integer from JWT token"""
-    user_id_str = get_jwt_identity()
-    return int(user_id_str) if user_id_str else None
+    """
+    Get the current user ID as an integer from JWT token
+    
+    This function extracts the user identity from the JWT token in the current request
+    context and converts it to an integer for database operations.
+    
+    Returns:
+        int: The current user's ID if authenticated, None otherwise
+        
+    Raises:
+        ValueError: If the JWT identity cannot be converted to an integer
+        
+    Example:
+        >>> user_id = get_current_user_id()
+        >>> if user_id:
+        >>>     user = User.query.get(user_id)
+    """
+    try:
+        user_id_str = get_jwt_identity()
+        if user_id_str:
+            user_id = int(user_id_str)
+            app_logger.debug(f"Retrieved user ID {user_id} from JWT token")
+            return user_id
+        else:
+            app_logger.debug("No user identity found in JWT token")
+            return None
+    except (ValueError, TypeError) as e:
+        app_logger.error(f"Error converting JWT identity to integer: {e}")
+        return None
 
 # Text processing functions
 def extract_text_from_file(file_path):
-    """Extract text from various file types with language-specific handling"""
-    file_extension = Path(file_path).suffix.lower()
-    file_name = Path(file_path).name
-
+    """
+    Extract text from various file types with language-specific handling
+    
+    This function is the main entry point for text extraction from uploaded files.
+    It supports multiple file formats including documents, code files, and data files.
+    Each file type is processed with specialized handlers to preserve structure and meaning.
+    
+    Supported File Types:
+        - Documents: PDF (.pdf), Word (.docx, .doc), Excel (.xlsx, .xls)
+        - Programming: Python (.py), JavaScript/TypeScript (.js, .ts), Java (.java),
+          C/C++ (.cpp, .c, .h, .hpp), Go (.go), Rust (.rs)
+        - Markup: Markdown (.md), HTML (.html), CSS (.css)
+        - Data: JSON (.json), YAML (.yaml, .yml), CSV (.csv)
+        - Text: Plain text (.txt) and other text-based files
+    
+    Args:
+        file_path (str|Path): Path to the file to extract text from
+        
+    Returns:
+        str: Extracted and formatted text content with metadata headers
+        
+    Raises:
+        FileNotFoundError: If the specified file doesn't exist
+        PermissionError: If unable to read the file
+        UnicodeDecodeError: If file encoding cannot be determined
+        
+    Example:
+        >>> text = extract_text_from_file('/path/to/document.pdf')
+        >>> print(text[:100])  # First 100 characters
+        
+    Note:
+        Binary files (PDF, DOCX, XLSX) require additional dependencies:
+        - PyMuPDF for PDF processing
+        - openpyxl/pandas for Excel files
+        - python-docx for Word documents
+    """
+    file_path = Path(file_path)
+    file_extension = file_path.suffix.lower()
+    file_name = file_path.name
+    
+    app_logger.info(f"Starting text extraction for file: {file_name} (type: {file_extension})")
+    
     try:
         # Handle binary file types first
         if file_extension == '.pdf':
-            return extract_pdf_content(file_path, file_name)
+            app_logger.debug(f"Processing PDF file: {file_name}")
+            result = extract_pdf_content(file_path, file_name)
+            app_logger.info(f"Successfully extracted {len(result)} characters from PDF: {file_name}")
+            return result
         elif file_extension in ['.xlsx', '.xls']:
-            return extract_excel_content(file_path, file_name)
+            app_logger.debug(f"Processing Excel file: {file_name}")
+            result = extract_excel_content(file_path, file_name)
+            app_logger.info(f"Successfully extracted {len(result)} characters from Excel: {file_name}")
+            return result
         elif file_extension in ['.docx', '.doc']:
-            return extract_docx_content(file_path, file_name)
+            app_logger.debug(f"Processing Word document: {file_name}")
+            result = extract_docx_content(file_path, file_name)
+            app_logger.info(f"Successfully extracted {len(result)} characters from Word: {file_name}")
+            return result
 
         # Handle text-based files
+        app_logger.debug(f"Processing text-based file: {file_name}")
+        content = None
+        encoding_used = 'utf-8'
+        
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
-        except UnicodeDecodeError:
-            with open(file_path, 'r', encoding='latin-1') as f:
-                content = f.read()
+            app_logger.debug(f"Successfully read file with UTF-8 encoding")
+        except UnicodeDecodeError as e:
+            app_logger.warning(f"UTF-8 decoding failed for {file_name}, trying latin-1: {e}")
+            try:
+                with open(file_path, 'r', encoding='latin-1') as f:
+                    content = f.read()
+                encoding_used = 'latin-1'
+                app_logger.debug(f"Successfully read file with latin-1 encoding")
+            except Exception as e2:
+                app_logger.error(f"Failed to read file with latin-1 encoding: {e2}")
+                raise e2
+
+        if content is None:
+            raise ValueError("Failed to read file content")
 
         # Add language-specific metadata and formatting
+        app_logger.debug(f"Applying language-specific formatting for {file_extension}")
+        
         if file_extension in ['.py']:
-            return format_python_content(content, file_name)
+            formatted_content = format_python_content(content, file_name)
         elif file_extension in ['.js', '.ts']:
-            return format_javascript_content(content, file_name)
+            formatted_content = format_javascript_content(content, file_name)
         elif file_extension in ['.java']:
-            return format_java_content(content, file_name)
+            formatted_content = format_java_content(content, file_name)
         elif file_extension in ['.cpp', '.c', '.h', '.hpp']:
-            return format_cpp_content(content, file_name)
+            formatted_content = format_cpp_content(content, file_name)
         elif file_extension in ['.go']:
-            return format_go_content(content, file_name)
+            formatted_content = format_go_content(content, file_name)
         elif file_extension in ['.rs']:
-            return format_rust_content(content, file_name)
+            formatted_content = format_rust_content(content, file_name)
         elif file_extension == '.md':
-            return format_markdown_content(content, file_name)
+            formatted_content = format_markdown_content(content, file_name)
         elif file_extension in ['.json', '.yaml', '.yml']:
-            return format_config_content(content, file_name, file_extension)
+            formatted_content = format_config_content(content, file_name, file_extension)
         elif file_extension == '.csv':
-            return format_csv_content(content, file_name)
+            formatted_content = format_csv_content(content, file_name)
         elif file_extension == '.txt':
-            return f"# {file_name}\n\n{content}"
+            formatted_content = f"# {file_name}\n\n{content}"
         else:
             # For other file types, add basic formatting
-            return f"# {file_name}\nFile Type: {file_extension}\n\n{content}"
+            formatted_content = f"# {file_name}\nFile Type: {file_extension}\nEncoding: {encoding_used}\n\n{content}"
 
+        app_logger.info(f"Successfully extracted and formatted {len(formatted_content)} characters from {file_name}")
+        return formatted_content
+
+    except FileNotFoundError as e:
+        error_msg = f"File not found: {file_path}"
+        app_logger.error(error_msg)
+        log_error_with_context(e, {"file_path": str(file_path), "file_name": file_name})
+        return f"# {file_name}\nError: {error_msg}"
+    except PermissionError as e:
+        error_msg = f"Permission denied accessing file: {file_path}"
+        app_logger.error(error_msg)
+        log_error_with_context(e, {"file_path": str(file_path), "file_name": file_name})
+        return f"# {file_name}\nError: {error_msg}"
     except Exception as e:
-        return f"# {file_name}\nError reading file {file_path}: {str(e)}"
+        error_msg = f"Unexpected error reading file {file_path}: {str(e)}"
+        app_logger.error(error_msg)
+        log_error_with_context(e, {"file_path": str(file_path), "file_name": file_name, "file_extension": file_extension})
+        return f"# {file_name}\nError: {error_msg}"
 
 def extract_pdf_content(file_path, file_name):
-    """Extract text from PDF files using PyMuPDF"""
+    """
+    Extract text from PDF files using PyMuPDF (fitz)
+    
+    This function extracts text content from PDF documents page by page,
+    preserving page structure and handling various PDF formats including
+    text-based PDFs and OCR-scanned documents.
+    
+    Args:
+        file_path (str|Path): Path to the PDF file
+        file_name (str): Name of the file for header generation
+        
+    Returns:
+        str: Formatted text content with page headers and metadata
+        
+    Raises:
+        ImportError: If PyMuPDF is not installed
+        Exception: For PDF parsing errors or corrupted files
+        
+    Dependencies:
+        - PyMuPDF (fitz): pip install pymupdf
+        
+    Example:
+        >>> content = extract_pdf_content('/path/to/document.pdf', 'document.pdf')
+        >>> print(f"Extracted {len(content)} characters from PDF")
+        
+    Note:
+        - Empty pages are automatically skipped
+        - Page numbers are preserved in the output
+        - Metadata about the document is included in headers
+    """
+    app_logger.debug(f"Starting PDF text extraction for: {file_name}")
+    
     try:
         import fitz  # PyMuPDF
+        app_logger.debug("PyMuPDF imported successfully")
 
-        doc = fitz.open(file_path)
+        # Open PDF document
+        doc = fitz.open(str(file_path))
         text_content = []
+        total_pages = len(doc)
+        pages_with_content = 0
+        
+        app_logger.info(f"Processing PDF with {total_pages} pages: {file_name}")
 
-        for page_num in range(len(doc)):
-            page = doc.load_page(page_num)
-            text = page.get_text()
-            if text.strip():
-                text_content.append(f"## Page {page_num + 1}\n\n{text}")
+        # Extract text from each page
+        for page_num in range(total_pages):
+            try:
+                page = doc.load_page(page_num)
+                text = page.get_text()
+                
+                if text.strip():
+                    text_content.append(f"## Page {page_num + 1}\n\n{text}")
+                    pages_with_content += 1
+                    app_logger.debug(f"Extracted {len(text)} characters from page {page_num + 1}")
+                else:
+                    app_logger.debug(f"Page {page_num + 1} is empty or contains no text")
+                    
+            except Exception as page_error:
+                app_logger.warning(f"Error processing page {page_num + 1}: {page_error}")
+                text_content.append(f"## Page {page_num + 1}\n\n[Error extracting page content: {page_error}]")
 
         doc.close()
+        app_logger.debug("PDF document closed successfully")
 
-        full_content = f"# PDF Document: {file_name}\n\n" + "\n\n".join(text_content)
+        # Create formatted content with metadata
+        metadata = [
+            f"# PDF Document: {file_name}",
+            f"Total Pages: {total_pages}",
+            f"Pages with Content: {pages_with_content}",
+            f"Extraction Date: {datetime.now().isoformat()}",
+            ""
+        ]
+        
+        full_content = "\n".join(metadata) + "\n".join(text_content)
+        
+        app_logger.info(f"Successfully extracted PDF content: {len(full_content)} characters from {pages_with_content}/{total_pages} pages")
         return full_content
 
-    except ImportError:
-        return f"# PDF Document: {file_name}\n\nError: PyMuPDF not installed. Cannot extract PDF content."
+    except ImportError as e:
+        error_msg = "PyMuPDF not installed. Cannot extract PDF content. Install with: pip install pymupdf"
+        app_logger.error(f"PDF extraction failed for {file_name}: {error_msg}")
+        log_error_with_context(e, {"file_name": file_name, "file_path": str(file_path)})
+        return f"# PDF Document: {file_name}\n\nError: {error_msg}"
     except Exception as e:
-        return f"# PDF Document: {file_name}\n\nError extracting PDF content: {str(e)}"
+        error_msg = f"Error extracting PDF content: {str(e)}"
+        app_logger.error(f"PDF extraction failed for {file_name}: {error_msg}")
+        log_error_with_context(e, {"file_name": file_name, "file_path": str(file_path)})
+        return f"# PDF Document: {file_name}\n\nError: {error_msg}"
 
 def extract_excel_content(file_path, file_name):
-    """Extract content from Excel files"""
+    """Extract content from Excel files with enhanced analysis"""
     try:
         import pandas as pd
+        import openpyxl
+        from openpyxl import load_workbook
 
         # Read all sheets
         excel_file = pd.ExcelFile(file_path)
         content_parts = [f"# Excel File: {file_name}\n"]
+        
+        # Try to get workbook metadata
+        try:
+            wb = load_workbook(file_path, read_only=True)
+            if hasattr(wb, 'properties') and wb.properties:
+                props = wb.properties
+                if props.title:
+                    content_parts.append(f"**Title:** {props.title}")
+                if props.creator:
+                    content_parts.append(f"**Author:** {props.creator}")
+                if props.description:
+                    content_parts.append(f"**Description:** {props.description}")
+                content_parts.append("")
+            wb.close()
+        except:
+            pass  # Continue without metadata if it fails
 
-        for sheet_name in excel_file.sheet_names:
-            df = pd.read_excel(file_path, sheet_name=sheet_name)
+        total_rows = 0
+        total_sheets = len(excel_file.sheet_names)
+        content_parts.append(f"**Total Sheets:** {total_sheets}\n")
 
-            content_parts.append(f"\n## Sheet: {sheet_name}")
-            content_parts.append(f"Rows: {len(df)}, Columns: {len(df.columns)}")
-            content_parts.append(f"Columns: {', '.join(df.columns.tolist())}")
+        for i, sheet_name in enumerate(excel_file.sheet_names):
+            try:
+                df = pd.read_excel(file_path, sheet_name=sheet_name)
+                total_rows += len(df)
 
-            # Add sample data (first 5 rows)
-            if len(df) > 0:
-                content_parts.append("\n### Sample Data:")
-                content_parts.append(df.head().to_string())
+                content_parts.append(f"\n## Sheet {i+1}: {sheet_name}")
+                content_parts.append(f"- **Dimensions:** {len(df)} rows × {len(df.columns)} columns")
+                
+                if not df.empty:
+                    # Column information
+                    content_parts.append(f"- **Columns:** {', '.join(df.columns.tolist())}")
+                    
+                    # Data types
+                    dtype_summary = df.dtypes.value_counts()
+                    dtype_info = []
+                    for dtype, count in dtype_summary.items():
+                        dtype_info.append(f"{count} {dtype}")
+                    content_parts.append(f"- **Data Types:** {', '.join(dtype_info)}")
 
-            # Add summary statistics for numeric columns
-            numeric_cols = df.select_dtypes(include=['number']).columns
-            if len(numeric_cols) > 0:
-                content_parts.append("\n### Numeric Summary:")
-                content_parts.append(df[numeric_cols].describe().to_string())
+                    # Missing data info
+                    missing_data = df.isnull().sum()
+                    if missing_data.sum() > 0:
+                        missing_cols = [f"{col} ({missing_data[col]})" for col in missing_data.index if missing_data[col] > 0]
+                        content_parts.append(f"- **Missing Values:** {', '.join(missing_cols)}")
+
+                    # Sample data (first 3 rows in markdown table format)
+                    content_parts.append("\n### Sample Data (First 3 Rows)")
+                    sample_df = df.head(3)
+                    
+                    # Create markdown table
+                    headers = ["| " + " | ".join(str(col) for col in sample_df.columns) + " |"]
+                    separator = ["| " + " | ".join(["---"] * len(sample_df.columns)) + " |"]
+                    
+                    rows = []
+                    for _, row in sample_df.iterrows():
+                        row_data = []
+                        for val in row:
+                            if pd.isna(val):
+                                row_data.append("*empty*")
+                            else:
+                                val_str = str(val)
+                                # Truncate very long values
+                                if len(val_str) > 50:
+                                    val_str = val_str[:47] + "..."
+                                row_data.append(val_str)
+                        rows.append("| " + " | ".join(row_data) + " |")
+                    
+                    content_parts.extend(headers + separator + rows)
+
+                    # Summary statistics for numeric columns
+                    numeric_cols = df.select_dtypes(include=['number']).columns
+                    if len(numeric_cols) > 0:
+                        content_parts.append("\n### Numeric Summary")
+                        desc = df[numeric_cols].describe()
+                        
+                        # Format as markdown table
+                        stats_headers = ["| Statistic | " + " | ".join(numeric_cols) + " |"]
+                        stats_separator = ["| --- | " + " | ".join(["---"] * len(numeric_cols)) + " |"]
+                        
+                        stats_rows = []
+                        for stat in ['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max']:
+                            if stat in desc.index:
+                                row_data = [stat]
+                                for col in numeric_cols:
+                                    val = desc.loc[stat, col]
+                                    if pd.isna(val):
+                                        row_data.append("N/A")
+                                    else:
+                                        if isinstance(val, float):
+                                            row_data.append(f"{val:.2f}")
+                                        else:
+                                            row_data.append(str(val))
+                                stats_rows.append("| " + " | ".join(row_data) + " |")
+                        
+                        content_parts.extend(stats_headers + stats_separator + stats_rows)
+
+                    # Categorical data summary
+                    categorical_cols = df.select_dtypes(include=['object', 'category']).columns
+                    if len(categorical_cols) > 0:
+                        content_parts.append("\n### Categorical Data Summary")
+                        for col in categorical_cols[:3]:  # Limit to first 3 categorical columns
+                            unique_count = df[col].nunique()
+                            content_parts.append(f"- **{col}:** {unique_count} unique values")
+                            if unique_count <= 10:  # Show values if not too many
+                                top_values = df[col].value_counts().head(5)
+                                values_str = ", ".join([f"{val} ({count})" for val, count in top_values.items()])
+                                content_parts.append(f"  - Most frequent: {values_str}")
+
+            except Exception as e:
+                content_parts.append(f"\n## Sheet {i+1}: {sheet_name}")
+                content_parts.append(f"Error reading sheet: {str(e)}")
+
+        # Overall summary
+        content_parts.append(f"\n## Overall Summary")
+        content_parts.append(f"- **Total Sheets:** {total_sheets}")
+        content_parts.append(f"- **Total Rows:** {total_rows}")
 
         return "\n".join(content_parts)
 
-    except ImportError:
-        return f"# Excel File: {file_name}\n\nError: pandas not installed. Cannot extract Excel content."
+    except ImportError as e:
+        missing_module = "pandas" if "pandas" not in str(e) else "openpyxl"
+        return f"# Excel File: {file_name}\n\nError: {missing_module} not installed. Install with: pip install {missing_module} pandas"
     except Exception as e:
         return f"# Excel File: {file_name}\n\nError extracting Excel content: {str(e)}"
 
 def extract_docx_content(file_path, file_name):
-    """Extract content from Word documents"""
+    """Extract content from Word documents with enhanced structure"""
     try:
         from docx import Document
 
         doc = Document(file_path)
         content_parts = [f"# Word Document: {file_name}\n"]
 
-        # Extract paragraphs
-        for para in doc.paragraphs:
-            if para.text.strip():
-                content_parts.append(para.text)
+        # Document properties
+        props = doc.core_properties
+        if props.title:
+            content_parts.append(f"**Title:** {props.title}")
+        if props.author:
+            content_parts.append(f"**Author:** {props.author}")
+        if props.subject:
+            content_parts.append(f"**Subject:** {props.subject}")
+        content_parts.append("")
 
-        # Extract tables
-        for table in doc.tables:
-            content_parts.append("\n## Table:")
-            for row in table.rows:
-                row_text = " | ".join([cell.text for cell in row.cells])
-                content_parts.append(row_text)
+        # Extract paragraphs with style information
+        current_section = None
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if not text:
+                continue
+                
+            style_name = para.style.name if para.style else "Normal"
+            
+            # Handle headings
+            if "Heading" in style_name:
+                level = style_name.replace("Heading ", "")
+                try:
+                    level_num = int(level)
+                    header_prefix = "#" * min(level_num + 1, 6)
+                    content_parts.append(f"\n{header_prefix} {text}")
+                    current_section = text
+                except:
+                    content_parts.append(f"\n## {text}")
+            elif style_name == "Title":
+                content_parts.append(f"\n# {text}")
+            else:
+                # Regular paragraphs
+                if current_section:
+                    content_parts.append(f"\n{text}")
+                else:
+                    content_parts.append(text)
+
+        # Extract tables with better formatting
+        for i, table in enumerate(doc.tables):
+            content_parts.append(f"\n## Table {i + 1}")
+            
+            # Extract headers if first row looks like headers
+            if table.rows:
+                first_row = table.rows[0]
+                headers = [cell.text.strip() for cell in first_row.cells]
+                
+                # Check if this looks like headers (short text, different formatting)
+                is_header_row = all(len(h) < 50 and h for h in headers)
+                
+                if is_header_row:
+                    content_parts.append("| " + " | ".join(headers) + " |")
+                    content_parts.append("| " + " | ".join(["---"] * len(headers)) + " |")
+                    start_row = 1
+                else:
+                    start_row = 0
+                
+                # Extract data rows
+                for row in table.rows[start_row:]:
+                    row_cells = [cell.text.strip() for cell in row.cells]
+                    if any(cell for cell in row_cells):  # Skip empty rows
+                        content_parts.append("| " + " | ".join(row_cells) + " |")
 
         return "\n".join(content_parts)
 
     except ImportError:
-        return f"# Word Document: {file_name}\n\nError: python-docx not installed. Cannot extract Word content."
+        return f"# Word Document: {file_name}\n\nError: python-docx not installed. Install with: pip install python-docx"
     except Exception as e:
         return f"# Word Document: {file_name}\n\nError extracting Word content: {str(e)}"
 
@@ -352,15 +760,90 @@ def format_config_content(content, file_name, file_extension):
     return formatted
 
 def chunk_text(text, chunk_size=1000, chunk_overlap=200, chunk_strategy='language-specific', file_extension=None):
-    """Split text into chunks using different strategies"""
+    """
+    Split text into chunks using different strategies optimized for RAG systems
+    
+    This is a critical function for the RAG (Retrieval-Augmented Generation) pipeline
+    that breaks down large text documents into manageable chunks for vector indexing
+    and semantic search. Different chunking strategies preserve different aspects
+    of the document structure and meaning.
+    
+    Chunking Strategies:
+        - language-specific: Uses syntax-aware chunking for code files (functions, classes)
+        - semantic: Groups related sentences and paragraphs together  
+        - size-based: Simple character-count based chunking with overlap
+        
+    Args:
+        text (str): The text content to chunk
+        chunk_size (int, optional): Target size for each chunk in characters. Defaults to 1000.
+        chunk_overlap (int, optional): Number of overlapping characters between chunks. Defaults to 200.
+        chunk_strategy (str, optional): Strategy to use ('language-specific', 'semantic', 'size'). Defaults to 'language-specific'.
+        file_extension (str, optional): File extension for language-specific chunking (e.g., '.py', '.js'). Defaults to None.
+        
+    Returns:
+        list[str]: List of text chunks with appropriate overlap
+        
+    Raises:
+        ValueError: If chunk_size is too small or chunk_overlap >= chunk_size
+        
+    Example:
+        >>> text = "def function1():\n    pass\n\ndef function2():\n    return True"
+        >>> chunks = chunk_text(text, chunk_size=500, chunk_strategy='language-specific', file_extension='.py')
+        >>> print(f"Created {len(chunks)} chunks")
+        
+    Note:
+        - Overlap helps maintain context between chunks for better retrieval
+        - Language-specific chunking preserves code structure and function boundaries
+        - Semantic chunking groups related content for better coherence
+        - For small texts (< chunk_size), returns single chunk without processing
+    """
+    app_logger.debug(f"Starting text chunking: {len(text)} characters, strategy='{chunk_strategy}', size={chunk_size}, overlap={chunk_overlap}")
+    
+    # Validate input parameters
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    if chunk_overlap >= chunk_size:
+        raise ValueError("chunk_overlap must be less than chunk_size")
+    
+    # Return single chunk for small texts
     if len(text) <= chunk_size:
+        app_logger.debug("Text is smaller than chunk_size, returning single chunk")
         return [text]
 
-    if chunk_strategy == 'language_specific' and file_extension:
-        return chunk_by_language(text, file_extension, chunk_size, chunk_overlap)
-    elif chunk_strategy == 'semantic':
-        return chunk_semantically(text, chunk_size, chunk_overlap)
-    else:
+    # Apply chunking strategy
+    try:
+        if chunk_strategy == 'language_specific' and file_extension:
+            app_logger.debug(f"Using language-specific chunking for {file_extension}")
+            chunks = chunk_by_language(text, file_extension, chunk_size, chunk_overlap)
+        elif chunk_strategy == 'semantic':
+            app_logger.debug("Using semantic chunking")
+            chunks = chunk_semantically(text, chunk_size, chunk_overlap)
+        else:
+            app_logger.debug("Using size-based chunking")
+            chunks = chunk_by_size(text, chunk_size, chunk_overlap)
+            
+        app_logger.info(f"Successfully created {len(chunks)} chunks using {chunk_strategy} strategy")
+        
+        # Log chunk statistics
+        if chunks:
+            avg_chunk_size = sum(len(chunk) for chunk in chunks) / len(chunks)
+            min_chunk_size = min(len(chunk) for chunk in chunks)
+            max_chunk_size = max(len(chunk) for chunk in chunks)
+            app_logger.debug(f"Chunk stats - Average: {avg_chunk_size:.1f}, Min: {min_chunk_size}, Max: {max_chunk_size}")
+        
+        return chunks
+        
+    except Exception as e:
+        app_logger.error(f"Error during text chunking: {e}")
+        log_error_with_context(e, {
+            "text_length": len(text),
+            "chunk_size": chunk_size,
+            "chunk_overlap": chunk_overlap,
+            "chunk_strategy": chunk_strategy,
+            "file_extension": file_extension
+        })
+        # Fallback to simple size-based chunking
+        app_logger.warning("Falling back to size-based chunking due to error")
         return chunk_by_size(text, chunk_size, chunk_overlap)
 
 def chunk_by_language(text, file_extension, chunk_size=1000, chunk_overlap=200):
@@ -1097,19 +1580,87 @@ def register():
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
+    """
+    Authenticate user and generate JWT access token
+    
+    This endpoint handles user authentication by validating credentials
+    and generating a JWT token for API access. The token includes the
+    user ID and has a 24-hour expiration time.
+    
+    Request Body:
+        {
+            "username": "string (required) - User's username or email",
+            "password": "string (required) - User's password"
+        }
+        
+    Returns:
+        200: Authentication successful
+        {
+            "access_token": "JWT token for API access",
+            "user": {
+                "id": "User ID",
+                "username": "Username", 
+                "email": "Email address",
+                "is_admin": "Boolean admin status"
+            }
+        }
+        
+        400: Missing required fields
+        401: Invalid credentials
+        500: Internal server error
+        
+    Security:
+        - Passwords are hashed using Werkzeug security
+        - JWT tokens expire after 24 hours
+        - Failed login attempts are logged for security monitoring
+        - No sensitive information is exposed in error messages
+        
+    Example:
+        POST /api/auth/login
+        {
+            "username": "admin",
+            "password": "admin123"
+        }
+    """
+    client_ip = request.remote_addr
+    user_agent = request.headers.get('User-Agent', 'Unknown')
+    app_logger.info(f"Login attempt from IP: {client_ip}, User-Agent: {user_agent}")
+    
     try:
+        # Parse request data
         data = request.get_json()
+        if not data:
+            app_logger.warning(f"Login attempt with no JSON data from {client_ip}")
+            return jsonify({'error': 'Invalid JSON data'}), 400
+            
         username = data.get('username')
         password = data.get('password')
 
+        # Validate required fields
         if not username or not password:
+            app_logger.warning(f"Login attempt with missing credentials from {client_ip}")
             return jsonify({'error': 'Missing username or password'}), 400
 
+        # Sanitize username for logging (avoid logging sensitive data)
+        username_safe = username[:3] + "*" * (len(username) - 3) if len(username) > 3 else "***"
+        app_logger.debug(f"Processing login for user: {username_safe}")
+
+        # Find user by username
         user = User.query.filter_by(username=username).first()
-        if not user or not user.check_password(password):
+        if not user:
+            app_logger.warning(f"Login failed: User not found for username {username_safe} from {client_ip}")
             return jsonify({'error': 'Invalid credentials'}), 401
 
+        # Verify password
+        if not user.check_password(password):
+            app_logger.warning(f"Login failed: Invalid password for user {username_safe} from {client_ip}")
+            return jsonify({'error': 'Invalid credentials'}), 401
+
+        # Generate access token
         access_token = create_access_token(identity=str(user.id))
+        
+        # Log successful authentication
+        app_logger.info(f"Successful login for user {user.username} (ID: {user.id}) from {client_ip}")
 
         return jsonify({
             'access_token': access_token,
@@ -1117,13 +1668,20 @@ def login():
         }), 200
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        app_logger.error(f"Error during login process from {client_ip}: {str(e)}")
+        log_error_with_context(e, {
+            "endpoint": "/api/auth/login",
+            "client_ip": client_ip,
+            "user_agent": user_agent,
+            "username": username_safe if 'username' in locals() else "unknown"
+        })
+        return jsonify({'error': 'Authentication failed'}), 500
 
 @app.route('/api/auth/profile', methods=['GET'])
 @jwt_required()
 def get_profile():
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         user = db.session.get(User, user_id)
 
         if not user:
@@ -1235,7 +1793,7 @@ def get_context(context_id):
 @jwt_required()
 def update_context(context_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         context = Context.query.filter_by(id=context_id, user_id=user_id).first()
 
         if not context:
@@ -1316,7 +1874,7 @@ def delete_context(context_id):
 @jwt_required()
 def reprocess_context(context_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         context = Context.query.filter_by(id=context_id, user_id=user_id).first()
 
         if not context:
@@ -1343,7 +1901,7 @@ def reprocess_context(context_id):
 @jwt_required()
 def get_context_status(context_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         context = Context.query.filter_by(id=context_id, user_id=user_id).first()
 
         if not context:
@@ -1364,7 +1922,7 @@ def get_context_status(context_id):
 @jwt_required()
 def get_context_chunks(context_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         context = Context.query.filter_by(id=context_id, user_id=user_id).first()
 
         if not context:
@@ -1395,7 +1953,7 @@ def get_chat_sessions():
 @jwt_required()
 def create_chat_session():
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         data = request.get_json() or {}
         
         session = ChatSession(
@@ -1415,7 +1973,7 @@ def create_chat_session():
 @jwt_required()
 def get_chat_session(session_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         session = ChatSession.query.filter_by(id=session_id, user_id=user_id).first()
 
         if not session:
@@ -1430,7 +1988,7 @@ def get_chat_session(session_id):
 @jwt_required()
 def update_chat_session(session_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         session = ChatSession.query.filter_by(id=session_id, user_id=user_id).first()
 
         if not session:
@@ -1450,7 +2008,7 @@ def update_chat_session(session_id):
 @jwt_required()
 def delete_chat_session(session_id):
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         session = ChatSession.query.filter_by(id=session_id, user_id=user_id).first()
 
         if not session:
@@ -1467,7 +2025,7 @@ def delete_chat_session(session_id):
 @jwt_required()
 def chat_query():
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         data = request.get_json()
         
         session_id = data.get('session_id')
@@ -1736,24 +2294,43 @@ def health_check():
         'version': 'local-dev'
     }), 200
 
-# Register route blueprints (only working ones for now)
+# Register route blueprints
 from routes.admin import admin_bp
 from routes.auth import auth_bp
+from routes.contexts import contexts_bp
+from routes.chat import chat_bp
+from routes.upload import upload_bp
+from routes.versions import versions_bp
+from routes.tasks import tasks_bp
+from routes.preferences import preferences_bp
 
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
+app.register_blueprint(contexts_bp, url_prefix='/api/contexts')
+app.register_blueprint(chat_bp, url_prefix='/api/chat')
+app.register_blueprint(upload_bp, url_prefix='/api/upload')
+app.register_blueprint(versions_bp, url_prefix='/api')
+app.register_blueprint(tasks_bp, url_prefix='/api')
+app.register_blueprint(preferences_bp)
 
-# TODO: Fix and register other blueprints:
-# - contexts_bp (has celery dependency issue)
-# - chat_bp (may have service dependency issues)
-# - upload_bp (needs model import fixes)
+# Error reporting endpoint
+@app.route('/api/errors/report', methods=['POST'])
+def report_error():
+    """Simple error reporting endpoint"""
+    try:
+        error_data = request.get_json()
+        logger.warning(f"Frontend error reported: {error_data}")
+        return jsonify({'status': 'error_reported', 'timestamp': datetime.now(timezone.utc).isoformat()}), 200
+    except Exception as e:
+        logger.error(f"Error handling error report: {e}")
+        return jsonify({'error': 'Failed to process error report'}), 500
 
 # Debug endpoint to check JWT token
 @app.route('/api/debug/token', methods=['GET'])
 @jwt_required()
 def debug_token():
     try:
-        user_id = get_jwt_identity()
+        user_id = get_current_user_id()
         return jsonify({
             'status': 'Token is valid',
             'user_id': user_id,
@@ -1809,11 +2386,87 @@ def add_security_headers(response):
     response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
 
+# Add request logging
+@app.before_request
+def log_request():
+    """Log incoming requests"""
+    request.start_time = datetime.now()
+    
+@app.after_request  
+def log_response(response):
+    """Log outgoing responses with timing"""
+    try:
+        if hasattr(request, 'start_time'):
+            duration = (datetime.now() - request.start_time).total_seconds()
+            log_request_info(request, response, duration)
+    except Exception as e:
+        app_logger.error(f"Error logging request: {e}")
+    return response
+
+@app.route('/api/admin/make-admin', methods=['POST'])
+@jwt_required()
+def make_first_user_admin():
+    """Make the first user an admin (development convenience)"""
+    try:
+        user_id = get_current_user_id()
+        
+        # Only allow if there are no admins yet
+        admin_count = User.query.filter_by(is_admin=True).count()
+        if admin_count > 0:
+            return jsonify({'error': 'Admin already exists'}), 403
+        
+        user = db.session.get(User, user_id)
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        user.is_admin = True
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'User {user.username} is now an admin',
+            'user': user.to_dict()
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def migrate_database():
+    """Add missing columns to existing database"""
+    try:
+        from sqlalchemy import inspect, text
+        
+        # Check if is_admin column exists
+        inspector = inspect(db.engine)
+        columns = [col['name'] for col in inspector.get_columns('users')]
+        
+        if 'is_admin' not in columns:
+            print("Adding is_admin column to users table...")
+            with db.engine.connect() as conn:
+                conn.execute(text('ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT 0'))
+                conn.commit()
+            print("[SUCCESS] Added is_admin column successfully")
+        else:
+            print("[SUCCESS] is_admin column already exists")
+            
+    except Exception as e:
+        print(f"Migration error: {e}")
+        print("[ERROR] Database migration failed. Please delete the ragchatbot.db file and restart to create a fresh database.")
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+        
+        # Run database migration for existing databases
+        migrate_database()
+        
         print("Database tables created successfully")
         print(f"Upload folder: {app.config['UPLOAD_FOLDER']}")
+        
+        # Start background task service
+        from services.task_service import start_task_service
+        start_task_service(num_workers=2)
+        print("Background task service started with 2 workers")
+        
         print("Starting Flask development server...")
 
     # Run without debug mode to avoid watchdog issues

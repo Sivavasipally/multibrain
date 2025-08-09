@@ -341,3 +341,48 @@ class DatabaseService:
         cluster.shutdown()
         
         return pd.DataFrame(data)
+    
+    def get_table_list(self, db_type: str, connection_string: str) -> List[str]:
+        """Get list of table/collection names"""
+        try:
+            if db_type in ['sqlite', 'mysql', 'postgresql', 'oracle']:
+                engine = create_engine(connection_string)
+                inspector = inspect(engine)
+                return inspector.get_table_names()
+            elif db_type == 'mongodb':
+                client = pymongo.MongoClient(connection_string)
+                db_name = connection_string.split('/')[-1]
+                db = client[db_name]
+                tables = db.list_collection_names()
+                client.close()
+                return tables
+            elif db_type == 'cassandra':
+                # Parse connection and connect
+                parts = connection_string.replace('cassandra://', '').split('@')
+                if len(parts) == 2:
+                    auth_part, host_part = parts
+                    username, password = auth_part.split(':')
+                    auth_provider = PlainTextAuthProvider(username=username, password=password)
+                else:
+                    host_part = parts[0]
+                    auth_provider = None
+                
+                host, port_keyspace = host_part.split(':')
+                port, keyspace = port_keyspace.split('/')
+                
+                cluster = Cluster([host], port=int(port), auth_provider=auth_provider)
+                session = cluster.connect(keyspace)
+                
+                # Get table names from system schema
+                rows = session.execute(f"SELECT table_name FROM system_schema.tables WHERE keyspace_name='{keyspace}'")
+                tables = [row.table_name for row in rows]
+                
+                session.shutdown()
+                cluster.shutdown()
+                
+                return tables
+            else:
+                return []
+        except Exception as e:
+            print(f"Error getting table list: {e}")
+            return []

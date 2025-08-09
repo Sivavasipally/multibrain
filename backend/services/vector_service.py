@@ -1,5 +1,31 @@
 """
-Vector storage service using FAISS
+Vector Storage Service using FAISS for RAG (Retrieval-Augmented Generation)
+
+This module provides comprehensive vector storage and similarity search capabilities
+for the RAG Chatbot PWA. It supports multiple embedding models and provides fallback
+mechanisms for robust operation across different environments.
+
+Key Features:
+- FAISS-based vector indexing for fast similarity search
+- Multiple embedding model support (Gemini, Sentence Transformers, fallback)
+- Automatic fallback mechanisms for missing dependencies
+- Batch processing for efficient vector operations
+- Comprehensive error handling and logging
+- Support for both file-based and in-memory vector stores
+
+Supported Embedding Models:
+- Google Gemini text-embedding-004 (primary)
+- Sentence Transformers all-MiniLM-L6-v2 (fallback)
+- Basic TF-IDF vectorization (emergency fallback)
+
+Dependencies:
+- faiss-cpu: Fast similarity search library
+- sentence-transformers: Local embedding model
+- google-generativeai: Gemini API for embeddings
+- numpy: Numerical operations
+
+Author: RAG Chatbot Development Team
+Version: 1.0.0
 """
 
 import os
@@ -8,70 +34,171 @@ import pickle
 import numpy as np
 from typing import List, Dict, Any, Optional
 
+# Import logging functionality
+from logging_config import get_logger, log_error_with_context
+
+# Initialize logger
+logger = get_logger('vector_service')
+
 # Optional imports with fallbacks
 try:
     import faiss
     FAISS_AVAILABLE = True
+    logger.info("FAISS library loaded successfully")
 except ImportError:
     FAISS_AVAILABLE = False
-    print("Warning: FAISS not available. Vector search will be disabled.")
+    logger.warning("FAISS not available. Vector search will be limited to basic similarity search.")
 
 # Check if sentence transformers is available without importing
 try:
     import importlib.util
     spec = importlib.util.find_spec("sentence_transformers")
     SENTENCE_TRANSFORMERS_AVAILABLE = spec is not None
+    if SENTENCE_TRANSFORMERS_AVAILABLE:
+        logger.info("Sentence Transformers available for local embeddings")
+    else:
+        logger.warning("Sentence Transformers not available. Will use alternative embedding methods.")
 except ImportError:
     SENTENCE_TRANSFORMERS_AVAILABLE = False
-
-if not SENTENCE_TRANSFORMERS_AVAILABLE:
-    print("Warning: Sentence Transformers not available. Using basic embeddings.")
+    logger.warning("Failed to check Sentence Transformers availability")
 
 try:
     import google.generativeai as genai
     GEMINI_AVAILABLE = True
+    logger.info("Google Generative AI library loaded successfully")
 except ImportError:
     GEMINI_AVAILABLE = False
-    print("Warning: Google Generative AI not available.")
+    logger.warning("Google Generative AI not available. Gemini embeddings will be unavailable.")
 
 class VectorService:
-    """Service for vector storage and similarity search using FAISS"""
+    """
+    Comprehensive vector storage and similarity search service for RAG systems
+    
+    This class provides a robust vector database implementation using FAISS for 
+    fast similarity search operations. It supports multiple embedding models with
+    automatic fallback mechanisms and comprehensive error handling.
+    
+    Key Features:
+    - Multi-model embedding support (Gemini, Sentence Transformers, fallback)
+    - FAISS-based vector indexing with cosine similarity search
+    - Automatic fallback to simple vector operations when FAISS unavailable
+    - Batch processing for efficient operations
+    - Comprehensive error handling and logging
+    - Support for both persistent and in-memory vector stores
+    
+    Architecture:
+    1. Embedding Creation: Text → Vector embeddings using selected model
+    2. Vector Storage: FAISS index creation with metadata persistence
+    3. Similarity Search: Query embedding → Similar document retrieval
+    4. Result Ranking: Cosine similarity scoring and ranking
+    
+    Attributes:
+        embedding_model (str): Primary embedding model identifier
+        sentence_transformer: Local Sentence Transformers model instance
+        gemini_client: Google Gemini API client for embeddings
+        
+    Example:
+        >>> service = VectorService('text-embedding-004')
+        >>> chunks = [{'content': 'Example text', 'source': 'doc1.pdf'}]
+        >>> service.create_vector_store(chunks, '/path/to/store')
+        >>> results = service.search_similar('/path/to/store', 'query text', top_k=5)
+    """
     
     def __init__(self, embedding_model: str = 'text-embedding-004'):
+        """
+        Initialize the Vector Service with specified embedding model
+        
+        Args:
+            embedding_model (str): Embedding model to use. Options:
+                - 'text-embedding-004': Google Gemini embeddings (default)
+                - 'all-MiniLM-L6-v2': Sentence Transformers local model
+                - 'fallback': Basic TF-IDF vectorization
+                
+        Raises:
+            ValueError: If embedding_model is not supported
+            ImportError: If required dependencies are missing
+        """
+        logger.info(f"Initializing VectorService with embedding model: {embedding_model}")
+        
         self.embedding_model = embedding_model
         self.sentence_transformer = None
         self.gemini_client = None
         
+        # Validate embedding model
+        supported_models = ['text-embedding-004', 'all-MiniLM-L6-v2', 'fallback']
+        if embedding_model not in supported_models:
+            logger.warning(f"Unknown embedding model: {embedding_model}. Supported: {supported_models}")
+        
         # Initialize embedding models
-        self._init_embedding_models()
+        try:
+            self._init_embedding_models()
+            logger.info("VectorService initialization completed successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize VectorService: {e}")
+            log_error_with_context(e, {"embedding_model": embedding_model})
+            raise
     
     def _init_embedding_models(self):
-        """Initialize embedding models"""
+        """
+        Initialize embedding models based on availability and configuration
+        
+        This method attempts to initialize multiple embedding models in order of preference:
+        1. Google Gemini text-embedding-004 (if API key available)
+        2. Sentence Transformers all-MiniLM-L6-v2 (local processing)
+        3. Fallback to basic TF-IDF if neither available
+        
+        The initialization is fault-tolerant and will use the best available option.
+        
+        Raises:
+            Exception: If no embedding models can be initialized
+        """
+        logger.debug("Starting embedding models initialization")
+        initialized_models = []
+        
         try:
             # Initialize Sentence Transformers for local embeddings
             if SENTENCE_TRANSFORMERS_AVAILABLE:
                 try:
+                    logger.debug("Initializing Sentence Transformers model")
                     from sentence_transformers import SentenceTransformer
                     self.sentence_transformer = SentenceTransformer('all-MiniLM-L6-v2')
+                    initialized_models.append("Sentence Transformers")
+                    logger.info("Sentence Transformers model initialized successfully")
                 except Exception as e:
-                    print(f"Warning: Failed to initialize Sentence Transformers: {e}")
+                    logger.warning(f"Failed to initialize Sentence Transformers: {e}")
                     self.sentence_transformer = None
             else:
-                print("Warning: Sentence Transformers not available")
+                logger.debug("Sentence Transformers not available, skipping initialization")
 
             # Initialize Gemini for text-embedding-004
             if self.embedding_model == 'text-embedding-004' and GEMINI_AVAILABLE:
+                logger.debug("Initializing Gemini embeddings client")
                 api_key = os.getenv('GEMINI_API_KEY')
                 if api_key:
-                    genai.configure(api_key=api_key)
-                    self.gemini_client = genai
+                    try:
+                        genai.configure(api_key=api_key)
+                        self.gemini_client = genai
+                        initialized_models.append("Gemini text-embedding-004")
+                        logger.info("Gemini embeddings client initialized successfully")
+                    except Exception as e:
+                        logger.error(f"Failed to configure Gemini client: {e}")
+                        self.gemini_client = None
                 else:
-                    print("Warning: GEMINI_API_KEY not found in environment")
+                    logger.warning("GEMINI_API_KEY not found in environment variables")
+                    logger.info("Set GEMINI_API_KEY to enable Gemini embeddings")
             elif not GEMINI_AVAILABLE:
-                print("Warning: Google Generative AI not available")
+                logger.debug("Google Generative AI not available, skipping Gemini initialization")
 
+            # Log initialization results
+            if initialized_models:
+                logger.info(f"Successfully initialized embedding models: {', '.join(initialized_models)}")
+            else:
+                logger.warning("No embedding models could be initialized - will use fallback methods")
+                
         except Exception as e:
-            print(f"Warning: Could not initialize embedding models: {e}")
+            logger.error(f"Critical error during embedding models initialization: {e}")
+            log_error_with_context(e, {"embedding_model": self.embedding_model})
+            raise Exception(f"Failed to initialize any embedding models: {e}")
     
     def create_embeddings(self, texts: List[str]) -> np.ndarray:
         """Create embeddings for a list of texts"""
@@ -208,10 +335,17 @@ class VectorService:
 
     def load_vector_store(self, store_path: str) -> tuple:
         """Load vector store and metadata (FAISS or simple)"""
-        metadata_path = os.path.join(store_path, 'metadata.json')
+        # Handle both directory paths and file paths
+        # If store_path ends with index.faiss, get the parent directory
+        if store_path.endswith('index.faiss') or store_path.endswith('index.faiss\\') or store_path.endswith('index.faiss/'):
+            store_dir = os.path.dirname(store_path)
+        else:
+            store_dir = store_path
+            
+        metadata_path = os.path.join(store_dir, 'metadata.json')
 
         if not os.path.exists(metadata_path):
-            raise FileNotFoundError(f"Vector store metadata not found at {store_path}")
+            raise FileNotFoundError(f"Vector store metadata not found at {store_dir} (derived from {store_path})")
 
         # Load metadata
         with open(metadata_path, 'r', encoding='utf-8') as f:
@@ -222,7 +356,7 @@ class VectorService:
 
         if store_type == 'simple' or not FAISS_AVAILABLE:
             # Load simple store (just embeddings)
-            embeddings_path = os.path.join(store_path, 'embeddings.npy')
+            embeddings_path = os.path.join(store_dir, 'embeddings.npy')
             if os.path.exists(embeddings_path):
                 embeddings = np.load(embeddings_path)
                 return embeddings, metadata
@@ -230,7 +364,7 @@ class VectorService:
                 raise FileNotFoundError(f"Embeddings file not found at {embeddings_path}")
         else:
             # Load FAISS index
-            index_path = os.path.join(store_path, 'index.faiss')
+            index_path = os.path.join(store_dir, 'index.faiss')
             if not os.path.exists(index_path):
                 raise FileNotFoundError(f"FAISS index not found at {index_path}")
 

@@ -35,8 +35,11 @@ import {
 import { chatAPI, contextsAPI } from '../services/api';
 import type { ChatSession, Message, Context } from '../types/api';
 import { useSnackbar } from '../contexts/SnackbarContext';
+import useErrorHandler from '../hooks/useErrorHandler';
+import { ComponentErrorBoundary } from '../components/ErrorBoundary/ErrorBoundary';
 import ChatMessage from '../components/Chat/ChatMessage';
 import ContextSelector from '../components/Chat/ContextSelector';
+import ContextSwitcher from '../components/Chat/ContextSwitcher';
 
 const Chat: React.FC = () => {
   const { sessionId } = useParams<{ sessionId: string }>();
@@ -53,20 +56,42 @@ const Chat: React.FC = () => {
   const [sending, setSending] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [contextSelectorOpen, setContextSelectorOpen] = useState(false);
+  const [contextSwitcherOpen, setContextSwitcherOpen] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { showError, showSuccess } = useSnackbar();
+  const errorHandler = useErrorHandler({ component: 'ChatPage' });
 
+  // Load initial data only once
   useEffect(() => {
-    loadSessions();
-    loadContexts();
-  }, []);
+    let mounted = true;
+    
+    const loadInitialData = async () => {
+      try {
+        await Promise.all([
+          loadSessions(),
+          loadContexts()
+        ]);
+      } catch (error) {
+        if (mounted) {
+          console.error('Failed to load initial chat data:', error);
+        }
+      }
+    };
+    
+    loadInitialData();
+    
+    return () => {
+      mounted = false;
+    };
+  }, []); // Empty dependency array - only run once
 
+  // Load specific session when sessionId changes
   useEffect(() => {
-    if (sessionId) {
+    if (sessionId && !isNaN(parseInt(sessionId))) {
       loadSession(parseInt(sessionId));
     }
-  }, [sessionId]);
+  }, [sessionId]); // Only depend on sessionId
 
   useEffect(() => {
     scrollToBottom();
@@ -76,47 +101,47 @@ const Chat: React.FC = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const loadSessions = async () => {
-    try {
+  const loadSessions = errorHandler.withErrorHandler(
+    async () => {
       const response = await chatAPI.getChatSessions();
       setSessions(response.sessions);
-    } catch (error: any) {
-      showError('Failed to load chat sessions');
-    }
-  };
+    },
+    'Failed to load chat sessions',
+    'loadSessions'
+  );
 
-  const loadContexts = async () => {
-    try {
+  const loadContexts = errorHandler.withErrorHandler(
+    async () => {
       const response = await contextsAPI.getContexts();
       const readyContexts = response.contexts.filter(c => c.status === 'ready');
       setContexts(readyContexts);
-    } catch (error: any) {
-      showError('Failed to load contexts');
-    }
-  };
+    },
+    'Failed to load contexts',
+    'loadContexts'
+  );
 
-  const loadSession = async (id: number) => {
-    try {
+  const loadSession = errorHandler.withErrorHandler(
+    async (id: number) => {
       const response = await chatAPI.getChatSession(id);
       setCurrentSession(response.session);
       setMessages(response.session.messages || []);
-    } catch (error: any) {
-      showError('Failed to load chat session');
-    }
-  };
+    },
+    'Failed to load chat session',
+    'loadSession'
+  );
 
-  const createNewSession = async () => {
-    try {
+  const createNewSession = errorHandler.withErrorHandler(
+    async () => {
       const response = await chatAPI.createChatSession();
       setSessions(prev => [response.session, ...prev]);
       navigate(`/chat/${response.session.id}`);
-    } catch (error: any) {
-      showError('Failed to create new session');
-    }
-  };
+    },
+    'Failed to create new session',
+    'createNewSession'
+  );
 
-  const deleteSession = async (id: number) => {
-    try {
+  const deleteSession = errorHandler.withErrorHandler(
+    async (id: number) => {
       await chatAPI.deleteChatSession(id);
       setSessions(prev => prev.filter(s => s.id !== id));
       
@@ -127,10 +152,10 @@ const Chat: React.FC = () => {
       }
       
       showSuccess('Session deleted');
-    } catch (error: any) {
-      showError('Failed to delete session');
-    }
-  };
+    },
+    'Failed to delete session',
+    'deleteSession'
+  );
 
   const sendMessage = async () => {
     if (!message.trim() || !currentSession || selectedContexts.length === 0) {
@@ -179,7 +204,7 @@ const Chat: React.FC = () => {
         )
       );
     } catch (error: any) {
-      showError('Failed to send message');
+      errorHandler.handleApiError(error, 'Failed to send message', 'sendMessage');
       // Remove the temp user message on error
       setMessages(prev => prev.slice(0, -1));
     } finally {
@@ -191,6 +216,40 @@ const Chat: React.FC = () => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
+    }
+  };
+
+  const handleContextsChange = (contextIds: number[]) => {
+    setSelectedContexts(contextIds);
+    
+    // Show feedback about context switch
+    if (contextIds.length > 0) {
+      const contextNames = contexts
+        .filter(ctx => contextIds.includes(ctx.id))
+        .map(ctx => ctx.name)
+        .join(', ');
+      
+      showSuccess(`Switched to context${contextIds.length > 1 ? 's' : ''}: ${contextNames}`);
+    }
+  };
+
+  const handleQuickContextSwitch = (contextId: number) => {
+    const isSelected = selectedContexts.includes(contextId);
+    
+    if (isSelected) {
+      // Remove context
+      if (selectedContexts.length > 1) {
+        setSelectedContexts(prev => prev.filter(id => id !== contextId));
+      } else {
+        showError('At least one context must be selected');
+      }
+    } else {
+      // Add context (up to 3 for quick switch)
+      if (selectedContexts.length < 3) {
+        setSelectedContexts(prev => [...prev, contextId]);
+      } else {
+        showError('Maximum 3 contexts can be active. Use the context switcher for more options.');
+      }
     }
   };
 
@@ -299,14 +358,46 @@ const Chat: React.FC = () => {
           </Box>
           
           {currentSession && (
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<StorageIcon />}
-              onClick={() => setContextSelectorOpen(true)}
-            >
-              Contexts ({selectedContexts.length})
-            </Button>
+            <Box display="flex" alignItems="center" gap={1}>
+              {/* Quick Context Pills */}
+              {selectedContexts.slice(0, 2).map(contextId => {
+                const context = contexts.find(c => c.id === contextId);
+                return context ? (
+                  <Chip
+                    key={contextId}
+                    label={context.name}
+                    size="small"
+                    onDelete={() => handleQuickContextSwitch(contextId)}
+                    clickable
+                    onClick={() => handleQuickContextSwitch(contextId)}
+                    color="primary"
+                    variant="outlined"
+                  />
+                ) : null;
+              })}
+              
+              {selectedContexts.length > 2 && (
+                <Chip
+                  label={`+${selectedContexts.length - 2} more`}
+                  size="small"
+                  variant="outlined"
+                  clickable
+                  onClick={() => setContextSwitcherOpen(true)}
+                />
+              )}
+              
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<StorageIcon />}
+                onClick={() => setContextSwitcherOpen(true)}
+              >
+                {selectedContexts.length === 0 
+                  ? 'Select Contexts' 
+                  : `${selectedContexts.length} Context${selectedContexts.length > 1 ? 's' : ''}`
+                }
+              </Button>
+            </Box>
           )}
         </Paper>
 
@@ -333,7 +424,7 @@ const Chat: React.FC = () => {
                     </Typography>
                     <Button
                       variant="contained"
-                      onClick={() => setContextSelectorOpen(true)}
+                      onClick={() => setContextSwitcherOpen(true)}
                     >
                       Select Contexts
                     </Button>
@@ -342,7 +433,19 @@ const Chat: React.FC = () => {
               ) : (
                 <>
                   {messages.map((msg, index) => (
-                    <ChatMessage key={msg.id || index} message={msg} />
+                    <ComponentErrorBoundary 
+                      key={msg.id || index} 
+                      componentName="ChatMessage"
+                      fallback={
+                        <Box sx={{ p: 2, bgcolor: 'error.light', borderRadius: 1, mb: 1 }}>
+                          <Typography color="error.contrastText">
+                            Error displaying message
+                          </Typography>
+                        </Box>
+                      }
+                    >
+                      <ChatMessage message={msg} />
+                    </ComponentErrorBoundary>
                   ))}
                   <div ref={messagesEndRef} />
                 </>
@@ -414,14 +517,61 @@ const Chat: React.FC = () => {
         )}
       </Box>
 
-      {/* Context Selector */}
-      <ContextSelector
-        open={contextSelectorOpen}
-        contexts={contexts}
-        selectedContexts={selectedContexts}
-        onSelectionChange={setSelectedContexts}
-        onClose={() => setContextSelectorOpen(false)}
-      />
+      {/* Context Selector (Legacy) */}
+      <ComponentErrorBoundary componentName="ContextSelector">
+        <ContextSelector
+          open={contextSelectorOpen}
+          contexts={contexts}
+          selectedContexts={selectedContexts}
+          onSelectionChange={setSelectedContexts}
+          onClose={() => setContextSelectorOpen(false)}
+        />
+      </ComponentErrorBoundary>
+
+      {/* Advanced Context Switcher */}
+      <ComponentErrorBoundary componentName="ContextSwitcher">
+        {contextSwitcherOpen && (
+          <Box
+            sx={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              bgcolor: 'rgba(0, 0, 0, 0.5)',
+              zIndex: 1300,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              p: 2,
+            }}
+            onClick={() => setContextSwitcherOpen(false)}
+          >
+            <Paper
+              sx={{
+                maxWidth: 800,
+                width: '100%',
+                maxHeight: '90vh',
+                overflow: 'auto',
+                p: 3,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ContextSwitcher
+                sessionId={currentSession?.id}
+                selectedContexts={selectedContexts}
+                onContextsChange={handleContextsChange}
+                maxContexts={5}
+                showMetrics={true}
+                showSearch={true}
+                showFilters={true}
+                allowEmpty={false}
+                onClose={() => setContextSwitcherOpen(false)}
+              />
+            </Paper>
+          </Box>
+        )}
+      </ComponentErrorBoundary>
 
       {/* Mobile FAB */}
       {isMobile && (

@@ -37,10 +37,7 @@ class ContextCleanupService:
         """
         try:
             # Get db and models from current app context
-            from flask_sqlalchemy import SQLAlchemy
-            db = current_app.extensions['sqlalchemy']
-
-            # Import models dynamically to avoid circular imports
+            from database import db
             from models import Context, Document, Message, ChatSession
 
             # Reset cleanup stats
@@ -106,7 +103,7 @@ class ContextCleanupService:
                 'stats': self.cleanup_stats
             }
     
-    def _cleanup_vector_stores(self, context: Context):
+    def _cleanup_vector_stores(self, context):
         """Clean up vector stores and embeddings"""
         try:
             if context.vector_store_path and os.path.exists(context.vector_store_path):
@@ -130,9 +127,12 @@ class ContextCleanupService:
             print(error_msg)
             self.cleanup_stats['errors'].append(error_msg)
     
-    def _cleanup_files_and_documents(self, context: Context):
+    def _cleanup_files_and_documents(self, context):
         """Clean up uploaded files and document records"""
         try:
+            from database import db
+            from models import Document
+            
             # Get all documents for this context
             documents = Document.query.filter_by(context_id=context.id).all()
             
@@ -167,6 +167,8 @@ class ContextCleanupService:
     def _cleanup_text_chunks(self, context_id: int):
         """Clean up text chunks (for app_local.py TextChunk model)"""
         try:
+            from database import db
+            
             # Check if TextChunk model exists (for app_local.py)
             try:
                 from app_local import TextChunk
@@ -191,6 +193,9 @@ class ContextCleanupService:
     def _cleanup_chat_data(self, context_id: int):
         """Clean up chat messages and sessions that reference this context"""
         try:
+            from database import db
+            from models import Message, ChatSession
+            
             # Find all messages that reference this context
             messages = Message.query.all()
             messages_to_update = []
@@ -236,9 +241,11 @@ class ContextCleanupService:
     def _cleanup_context_versions(self, context_id: int):
         """Clean up context versions if versioning is enabled"""
         try:
+            from database import db
+            
             # Check if context versioning is available
             try:
-                from models.context_version import ContextVersion
+                from context_versioning import ContextVersion
                 versions = ContextVersion.query.filter_by(context_id=context_id).all()
                 
                 for version in versions:
@@ -255,7 +262,7 @@ class ContextCleanupService:
             print(error_msg)
             self.cleanup_stats['errors'].append(error_msg)
     
-    def _cleanup_repository_files(self, context: Context):
+    def _cleanup_repository_files(self, context):
         """Clean up cloned repository files"""
         try:
             if context.source_type == 'repo':
@@ -281,6 +288,9 @@ class ContextCleanupService:
     def cleanup_orphaned_data(self) -> Dict[str, Any]:
         """Clean up orphaned data across the system"""
         try:
+            from database import db
+            from models import Context
+            
             cleanup_stats = {
                 'orphaned_vector_stores': 0,
                 'orphaned_files': 0,

@@ -1,0 +1,158 @@
+{
+  "timestamp": "2025-08-07 10:52:25",
+  "system_status": "PARTIALLY_STABLE",
+  "test_results": {
+    "Table users": {
+      "status": "PASS",
+      "message": "4 records"
+    },
+    "Table contexts": {
+      "status": "PASS",
+      "message": "1 records"
+    },
+    "Table chat_sessions": {
+      "status": "PASS",
+      "message": "1 records"
+    },
+    "Table documents": {
+      "status": "PASS",
+      "message": "0 records"
+    },
+    "Table messages": {
+      "status": "PASS",
+      "message": "2 records"
+    },
+    "Table text_chunks": {
+      "status": "PASS",
+      "message": "8 records"
+    },
+    "Database Connectivity": {
+      "status": "PASS",
+      "message": "All tables present and accessible"
+    },
+    "Directory instance": {
+      "status": "PASS",
+      "message": "Exists and accessible"
+    },
+    "Directory uploads": {
+      "status": "PASS",
+      "message": "Exists and accessible"
+    },
+    "Directory vector_stores": {
+      "status": "PASS",
+      "message": "Exists and accessible"
+    },
+    "Directory src": {
+      "status": "PASS",
+      "message": "Exists and accessible"
+    },
+    "Vector Store": {
+      "status": "PASS",
+      "message": "FAISS index and metadata found"
+    },
+    "Vector Metadata": {
+      "status": "FAIL",
+      "message": "Cannot read metadata"
+    },
+    "Import sqlite3": {
+      "status": "PASS",
+      "message": "Available"
+    },
+    "Import json": {
+      "status": "PASS",
+      "message": "Available"
+    },
+    "Import os": {
+      "status": "PASS",
+      "message": "Available"
+    },
+    "Import pathlib": {
+      "status": "PASS",
+      "message": "Available"
+    },
+    "Import flask": {
+      "status": "FAIL",
+      "message": "Not available"
+    },
+    "Import flask_sqlalchemy": {
+      "status": "FAIL",
+      "message": "Not available"
+    },
+    "Import flask_cors": {
+      "status": "FAIL",
+      "message": "Not available"
+    },
+    "Import flask_jwt_extended": {
+      "status": "FAIL",
+      "message": "Not available"
+    },
+    "Import numpy": {
+      "status": "WARN",
+      "message": "Not available (optional)"
+    },
+    "Import google.generativeai": {
+      "status": "WARN",
+      "message": "Not available (optional)"
+    },
+    "Import faiss": {
+      "status": "WARN",
+      "message": "Not available (optional)"
+    },
+    "Environment Config": {
+      "status": "PASS",
+      "message": "All required variables present"
+    },
+    "Frontend Config": {
+      "status": "PASS",
+      "message": "package.json valid"
+    },
+    "Backend Syntax": {
+      "status": "PASS",
+      "message": "Core Flask structure intact"
+    },
+    "Frontend Structure": {
+      "status": "FAIL",
+      "message": "Missing files: ['public/index.html']"
+    },
+    "Frontend Dependencies": {
+      "status": "PASS",
+      "message": "node_modules exists"
+    },
+    "User fixtest": {
+      "status": "PASS",
+      "message": "0 contexts"
+    },
+    "User siva": {
+      "status": "PASS",
+      "message": "1 contexts"
+    },
+    "User test": {
+      "status": "PASS",
+      "message": "0 contexts"
+    },
+    "User uploadtest": {
+      "status": "PASS",
+      "message": "0 contexts"
+    },
+    "Context test code ": {
+      "status": "PASS",
+      "message": "8/8 chunks match"
+    }
+  },
+  "recommendations": [
+    "Fix critical failures before deployment",
+    "Address warnings to improve system stability",
+    "Install missing Python package for Import flask",
+    "Install missing Python package for Import flask_sqlalchemy",
+    "Install missing Python package for Import flask_cors",
+    "Install missing Python package for Import flask_jwt_extended",
+    "Run 'npm install' in frontend directory"
+  ],
+  "summary": {
+    "total_tests": 34,
+    "passed": 25,
+    "failed": 6,
+    "warned": 3,
+    "success_rate": "73.5%"
+  }
+}

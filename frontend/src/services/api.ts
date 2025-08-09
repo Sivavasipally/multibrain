@@ -81,6 +81,25 @@ export interface Document {
   processed_at?: string;
 }
 
+export interface SearchResult {
+  context: Context;
+  relevance_score?: number;
+  highlights?: Array<{
+    field: string;
+    fragment: string;
+    positions: number[];
+  }>;
+}
+
+export interface SearchResponse {
+  results: SearchResult[];
+  total: number;
+  query: string;
+  filters: any;
+  execution_time_ms: number;
+  suggestions?: string[];
+}
+
 export interface ChatSession {
   id: number;
   title: string;
@@ -159,6 +178,40 @@ export const contextsAPI = {
 
   reprocessContext: async (id: number): Promise<{ context: Context }> => {
     const response = await api.post(`/contexts/${id}/reprocess`);
+    return response.data;
+  },
+  searchContexts: async (
+    query?: string,
+    filters?: {
+      status?: string;
+      source_type?: string;
+      date_from?: string;
+      date_to?: string;
+      chunks_min?: number;
+      chunks_max?: number;
+    },
+    sort?: {
+      field?: string;
+      order?: string;
+    },
+    limit?: number,
+    offset?: number
+  ): Promise<SearchResponse> => {
+    const params = new URLSearchParams();
+    
+    if (query) params.append('q', query);
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.source_type) params.append('source_type', filters.source_type);
+    if (filters?.date_from) params.append('date_from', filters.date_from);
+    if (filters?.date_to) params.append('date_to', filters.date_to);
+    if (filters?.chunks_min !== undefined) params.append('chunks_min', filters.chunks_min.toString());
+    if (filters?.chunks_max !== undefined) params.append('chunks_max', filters.chunks_max.toString());
+    if (sort?.field) params.append('sort_by', sort.field);
+    if (sort?.order) params.append('sort_order', sort.order);
+    if (limit !== undefined) params.append('limit', limit.toString());
+    if (offset !== undefined) params.append('offset', offset.toString());
+    
+    const response = await api.get(`/contexts/search?${params.toString()}`);
     return response.data;
   },
 
@@ -268,6 +321,81 @@ export const uploadAPI = {
 
   getSupportedExtensions: async (): Promise<{ extensions: any; total_count: number }> => {
     const response = await api.get('/upload/supported-extensions');
+    return response.data;
+  },
+};
+
+// Preferences API
+export const preferencesAPI = {
+  // Get all preferences
+  getPreferences: async () => {
+    const response = await api.get('/preferences');
+    return response.data;
+  },
+  
+  // Get category preferences
+  getCategoryPreferences: async (category: string) => {
+    const response = await api.get(`/preferences/${category}`);
+    return response.data;
+  },
+  
+  // Update all preferences
+  updatePreferences: async (preferences: any) => {
+    const response = await api.put('/preferences', { preferences });
+    return response.data;
+  },
+  
+  // Update category preferences
+  updateCategoryPreferences: async (category: string, preferences: any) => {
+    const response = await api.put(`/preferences/${category}`, { preferences });
+    return response.data;
+  },
+  
+  // Reset preferences
+  resetPreferences: async (category?: string) => {
+    const response = await api.post('/preferences/reset', category ? { category } : {});
+    return response.data;
+  },
+  
+  // Export preferences
+  exportPreferences: async (format: 'json' | 'csv' = 'json') => {
+    const response = await api.get(`/preferences/export?format=${format}`, {
+      responseType: 'text'
+    });
+    return response.data;
+  },
+  
+  // Import preferences
+  importPreferences: async (preferences: any, merge: boolean = false) => {
+    const response = await api.post('/preferences/import', { preferences, merge });
+    return response.data;
+  },
+  
+  // Get preference templates
+  getTemplates: async (category?: string, publicOnly: boolean = true) => {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    params.append('public_only', publicOnly.toString());
+    
+    const response = await api.get(`/preferences/templates?${params}`);
+    return response.data;
+  },
+  
+  // Create preference template
+  createTemplate: async (template: any) => {
+    const response = await api.post('/preferences/templates', template);
+    return response.data;
+  },
+  
+  // Apply preference template
+  applyTemplate: async (templateId: number) => {
+    const response = await api.post(`/preferences/templates/${templateId}/apply`);
+    return response.data;
+  },
+  
+  // Get preference schemas
+  getSchemas: async () => {
+    const response = await api.get('/preferences/schema');
     return response.data;
   },
 };

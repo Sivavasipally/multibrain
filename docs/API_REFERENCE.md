@@ -390,7 +390,7 @@ Send a chat query with context-aware response.
     "message": "What are the main findings in the research papers?",
     "context_ids": [1, 2],
     "session_id": 1,
-    "model": "gemini-pro",
+    "model": "gemini-2.0-flash",
     "max_tokens": 500,
     "temperature": 0.7
 }

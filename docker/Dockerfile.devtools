@@ -1,0 +1,105 @@
+# Development Tools Dockerfile for RAG Chatbot PWA
+# Provides database management, testing, and debugging tools
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    vim \
+    postgresql-client \
+    redis-tools \
+    htop \
+    tree \
+    jq \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /workspace
+
+# Copy requirements and install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
+
+# Install additional development tools
+RUN pip install \
+    ipython \
+    jupyter \
+    pytest-cov \
+    black \
+    flake8 \
+    mypy \
+    sqlalchemy-utils \
+    pgcli \
+    redis-cli
+
+# Create useful aliases and scripts
+RUN echo 'alias ll="ls -la"' >> /root/.bashrc && \
+    echo 'alias ..="cd .."' >> /root/.bashrc && \
+    echo 'alias db="pgcli $DATABASE_URL"' >> /root/.bashrc && \
+    echo 'alias redis="redis-cli -u $REDIS_URL"' >> /root/.bashrc
+
+# Create development scripts directory
+RUN mkdir -p /usr/local/bin/dev-scripts
+
+# Database management script
+RUN cat > /usr/local/bin/dev-scripts/db-reset << 'EOF'
+#!/bin/bash
+echo "Resetting database..."
+python -c "
+from models import db
+from app import create_app
+app = create_app()
+with app.app_context():
+    db.drop_all()
+    db.create_all()
+    print('Database reset complete')
+"
+EOF
+
+# Test runner script
+RUN cat > /usr/local/bin/dev-scripts/run-tests << 'EOF'
+#!/bin/bash
+echo "Running test suite..."
+python -m pytest tests/ -v --cov=. --cov-report=html --cov-report=term
+EOF
+
+# Code quality checker script
+RUN cat > /usr/local/bin/dev-scripts/check-code << 'EOF'
+#!/bin/bash
+echo "Checking code quality..."
+echo "Running Black..."
+black --check .
+echo "Running Flake8..."
+flake8 .
+echo "Running MyPy..."
+mypy .
+EOF
+
+# Make scripts executable
+RUN chmod +x /usr/local/bin/dev-scripts/*
+
+# Add scripts to PATH
+ENV PATH="/usr/local/bin/dev-scripts:$PATH"
+
+# Create jupyter config
+RUN mkdir -p /root/.jupyter && \
+    echo "c.NotebookApp.ip = '0.0.0.0'" > /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.port = 8888" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.open_browser = False" >> /root/.jupyter/jupyter_notebook_config.py && \
+    echo "c.NotebookApp.allow_root = True" >> /root/.jupyter/jupyter_notebook_config.py
+
+# Expose Jupyter port
+EXPOSE 8888
+
+# Default command
+CMD ["bash"]
