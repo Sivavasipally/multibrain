@@ -181,3 +181,6 @@ cython_debug/
 .cursorindexingignore
 /backend/uploads
 frontend/nul
+/backend/vector_stores
+/backend/vector_stores
+backend/vector_stores/2/index.faiss
