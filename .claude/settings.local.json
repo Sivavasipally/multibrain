@@ -50,7 +50,22 @@
       "Bash(../metagpt/Scripts/python.exe backend/fix_context_deletion.py)",
       "Bash(../../metagpt/Scripts/python.exe fix_context_deletion.py)",
       "Bash(/mnt/d/GenAi/multibrain/metagpt/Scripts/python.exe fix_context_deletion.py)",
-      "Bash(timeout 10s:*)"
+      "Bash(timeout 10s:*)",
+      "Bash(../metagpt/Scripts/python.exe test_vector_search.py)",
+      "Bash(ss:*)",
+      "Bash(timeout:*)",
+      "Bash(../metagpt/Scripts/python.exe ../test_multi_context.py)",
+      "Bash(PYTHONPATH=backend ../metagpt/Scripts/python.exe test_multi_context.py)",
+      "Bash(./metagpt/Scripts/python.exe test_multi_context.py)",
+      "Bash(./metagpt/Scripts/python.exe test_chat_complete.py)",
+      "Bash(./scripts/deploy-local.ps1 deploy)",
+      "Bash(true)",
+      "Bash(../metagpt/Scripts/python.exe test_document_processing.py)",
+      "Bash(../metagpt/Scripts/python.exe test_upload_documents.py)",
+      "Bash(../metagpt/Scripts/python.exe test_upload_integration.py)",
+      "Bash(../metagpt/Scripts/python.exe test_multi_context.py)",
+      "Bash(../metagpt/Scripts/python.exe test_chat_complete.py)",
+      "Bash(../metagpt/Scripts/python.exe reprocess_documents.py)"
     ],
     "deny": []
   }

@@ -290,11 +290,12 @@ export const chatAPI = {
 
 // Upload API
 export const uploadAPI = {
-  uploadFiles: async (contextId: number, files: FileList): Promise<{ files: any[] }> => {
+  uploadFiles: async (contextId: number, files: FileList | File[]): Promise<{ files: any[] }> => {
     const formData = new FormData();
     formData.append('context_id', contextId.toString());
     
-    Array.from(files).forEach((file) => {
+    const fileArray = Array.isArray(files) ? files : Array.from(files);
+    fileArray.forEach((file) => {
       formData.append('files', file);
     });
 

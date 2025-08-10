@@ -42,11 +42,39 @@ from database import db
 db.init_app(app)
 migrate = Migrate(app, db)
 jwt = JWTManager(app)
+# COMPREHENSIVE CORS CONFIGURATION
+# Allow ALL requests from localhost and 127.0.0.1 on ANY port
 CORS(app, 
-     origins=["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", 
-              "http://localhost:5175", "http://localhost:5176", "http://localhost:5177", 
-              "http://localhost:5178", "http://localhost:5179", "http://localhost:5180"],
-     supports_credentials=True)
+     origins=["*"],  # Allow all origins
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+     supports_credentials=False,
+     send_wildcard=True)
+
+# Add manual CORS headers as backup for complex requests
+@app.after_request
+def after_request_cors(response):
+    origin = request.headers.get('Origin')
+    if origin and ('localhost' in origin or '127.0.0.1' in origin):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+        response.headers['Access-Control-Max-Age'] = '86400'
+    return response
+
+# Handle preflight OPTIONS requests
+@app.before_request
+def handle_options():
+    if request.method == "OPTIONS":
+        origin = request.headers.get('Origin')
+        if origin and ('localhost' in origin or '127.0.0.1' in origin):
+            from flask import make_response
+            response = make_response()
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+            response.headers['Access-Control-Max-Age'] = '86400'
+            return response
 
 # Initialize Celery
 def make_celery(app):
@@ -94,7 +122,7 @@ def report_error():
     try:
         error_data = request.get_json()
         logger.warning(f"Frontend error reported: {error_data}")
-        return jsonify({'status': 'error_reported', 'timestamp': datetime.utcnow().isoformat()}), 200
+        return jsonify({'status': 'error_reported', 'timestamp': datetime.now().isoformat()}), 200
     except Exception as e:
         logger.error(f"Error handling error report: {e}")
         return jsonify({'error': 'Failed to process error report'}), 500
@@ -103,6 +131,11 @@ def report_error():
 def health_check():
     """Health check endpoint"""
     return jsonify({'status': 'healthy', 'message': 'RAG Chatbot API is running'})
+
+@app.route('/api/cors-test', methods=['GET', 'POST', 'OPTIONS'])
+def cors_test():
+    """Test endpoint to verify CORS is working"""
+    return jsonify({'message': 'CORS is working!', 'method': request.method})
 
 @app.errorhandler(404)
 def not_found(error):

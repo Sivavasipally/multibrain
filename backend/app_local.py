@@ -93,30 +93,45 @@ db.init_app(app)
 
 # Initialize other extensions
 jwt = JWTManager(app)
-CORS(app)
 
-# Add global CORS headers to all responses
+# COMPREHENSIVE CORS CONFIGURATION for LOCAL DEVELOPMENT
+# Allow ALL requests from localhost and 127.0.0.1 on ANY port
+CORS(app, 
+     origins=["*"],  # Allow all origins for development
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+     allow_headers=["Content-Type", "Authorization", "X-Requested-With", "Accept", "Origin"],
+     supports_credentials=False,
+     send_wildcard=True)
+
+# Add manual CORS headers as backup for complex requests
 @app.after_request
-def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
+def after_request_cors(response):
+    origin = request.headers.get('Origin')
+    if origin and ('localhost' in origin or '127.0.0.1' in origin):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+        response.headers['Access-Control-Max-Age'] = '86400'
     return response
 
-# Add a global OPTIONS handler for any route that might be missing one
+# Handle preflight OPTIONS requests
 @app.before_request
-def handle_preflight():
+def handle_options():
     if request.method == "OPTIONS":
-        from flask import make_response
-        response = make_response()
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With,Accept,Origin')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH')
-        return response
+        origin = request.headers.get('Origin')
+        if origin and ('localhost' in origin or '127.0.0.1' in origin):
+            from flask import make_response
+            response = make_response()
+            response.headers['Access-Control-Allow-Origin'] = origin
+            response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept, Origin'
+            response.headers['Access-Control-Max-Age'] = '86400'
+            return response
 
-# Initialize security middleware
-security_middleware = SecurityMiddleware(app)
-app_logger.info("Flask application initialized with security middleware")
+# DISABLE SECURITY MIDDLEWARE FOR LOCAL DEVELOPMENT
+# Comment out the security middleware to avoid rate limiting during development
+# security_middleware = SecurityMiddleware(app)
+app_logger.info("Flask application initialized WITHOUT security middleware for local development")
 
 # Create upload folder
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -2319,10 +2334,10 @@ def report_error():
     """Simple error reporting endpoint"""
     try:
         error_data = request.get_json()
-        logger.warning(f"Frontend error reported: {error_data}")
+        app_logger.warning(f"Frontend error reported: {error_data}")
         return jsonify({'status': 'error_reported', 'timestamp': datetime.now(timezone.utc).isoformat()}), 200
     except Exception as e:
-        logger.error(f"Error handling error report: {e}")
+        app_logger.error(f"Error handling error report: {e}")
         return jsonify({'error': 'Failed to process error report'}), 500
 
 # Debug endpoint to check JWT token

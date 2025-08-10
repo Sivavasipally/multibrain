@@ -479,10 +479,10 @@ const ContextSwitcher: React.FC<ContextSwitcherProps> = ({
                   
                   <ListItemText
                     primary={
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <Typography variant="body1">
+                      <Box component="span" display="inline-flex" alignItems="center" gap={1}>
+                        <Box component="span" variant="body1">
                           {context.name}
-                        </Typography>
+                        </Box>
                         <Chip
                           label={context.status}
                           size="small"
@@ -492,15 +492,15 @@ const ContextSwitcher: React.FC<ContextSwitcherProps> = ({
                       </Box>
                     }
                     secondary={
-                      <Box>
-                        <Typography variant="body2" color="textSecondary">
+                      <Box component="span">
+                        <Box component="span" variant="body2" color="textSecondary" display="block">
                           {context.description || 'No description'}
-                        </Typography>
+                        </Box>
                         {context.metrics && showMetrics && (
-                          <Typography variant="caption" color="textSecondary">
+                          <Box component="span" variant="caption" color="textSecondary" display="block">
                             {context.metrics.chunksCount} chunks • 
                             Last used {formatDate(context.metrics.lastUsed!)}
-                          </Typography>
+                          </Box>
                         )}
                       </Box>
                     }

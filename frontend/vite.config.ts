@@ -53,12 +53,14 @@ export default defineConfig({
     port: 5173,
     hmr: {
       port: 24678,
-      host: 'localhost'
+      host: 'localhost',
+      clientPort: 24678
     },
     proxy: {
       '/api': {
         target: 'http://localhost:5000',
-        changeOrigin: true
+        changeOrigin: true,
+        secure: false
       }
     }
   }

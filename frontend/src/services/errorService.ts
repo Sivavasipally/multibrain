@@ -92,7 +92,7 @@ class ErrorService {
       maxRetries: 3,
       enableAutoReporting: true,
       enableBreadcrumbs: true,
-      apiEndpoint: '/api/errors/report',
+      apiEndpoint: `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/errors/report`,
       rateLimitWindow: 60000, // 1 minute
       maxErrorsPerWindow: 10,
       ...config,

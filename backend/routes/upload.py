@@ -1130,7 +1130,29 @@ def extract_text_from_document(file_path):
         file_size = file_path.stat().st_size
         logger.debug(f"File size: {file_size:,} bytes")
         
-        # Handle text-based files with encoding fallback
+        # Import document processors from app_local
+        try:
+            import sys
+            sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+            from app_local import extract_text_from_file as comprehensive_extract_text_from_file
+            
+            # Use the comprehensive document processor which handles PDF, DOCX, Excel, etc.
+            logger.info(f"Starting text extraction for file: {file_path.name} (type: {file_extension})")
+            content = comprehensive_extract_text_from_file(str(file_path))
+            
+            if content and len(content) > 0:
+                logger.info(f"Successfully extracted and formatted {len(content)} characters from {file_path.name}")
+                return content
+            else:
+                logger.warning(f"No content extracted from {file_path.name}")
+                
+        except ImportError as import_error:
+            logger.warning(f"Could not import comprehensive document processor: {import_error}")
+            
+        except Exception as processing_error:
+            logger.error(f"Document processing error for {file_path.name}: {processing_error}")
+        
+        # Fallback to basic text processing for text-based files
         text_extensions = {
             '.txt', '.md', '.rst', '.log',  # Text files
             '.py', '.js', '.ts', '.java', '.cpp', '.c', '.h', '.hpp', '.go', '.rs', '.rb', '.php', '.cs', '.kt', '.swift',  # Code
@@ -1141,6 +1163,7 @@ def extract_text_from_document(file_path):
         }
         
         if file_extension in text_extensions:
+            logger.debug(f"Falling back to basic text processing for {file_extension}")
             # Try UTF-8 encoding first
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:
@@ -1165,7 +1188,7 @@ def extract_text_from_document(file_path):
                 return ""
         
         # For unsupported binary formats, create informative placeholder
-        logger.debug(f"Creating placeholder content for binary/unsupported format: {file_extension}")
+        logger.warning(f"Unsupported file format {file_extension}, creating placeholder for {file_path.name}")
         
         placeholder_content = f"""Document: {file_path.name}
 File Type: {file_extension}
@@ -1173,10 +1196,8 @@ File Size: {file_size:,} bytes
 Category: {get_file_category(file_path.name)}
 
 This {file_extension} file contains structured or binary data that requires specialized processing.
-In a full production implementation, this would be processed using:
-- PDF processors (PyMuPDF, pdfplumber) for PDF files
-- Office document parsers (python-docx, openpyxl) for Office files
-- Specialized parsers for other binary formats
+The document processing system supports PDF, DOCX, Excel, and many other formats,
+but extraction failed for this specific file.
 
 The file is available for download and manual review if needed."""
         

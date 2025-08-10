@@ -467,6 +467,17 @@ def generate_response(query, contexts, session, user_message_id):
             print(f"Context embedding model: {context.embedding_model}")
             print(f"Vector store path: {context.vector_store_path}")
 
+            # Skip contexts that don't have vector stores yet
+            if not context.vector_store_path:
+                print(f"Skipping context {context.name} - no vector store found (no documents uploaded yet)")
+                continue
+                
+            # Check if vector store actually exists
+            import os
+            if not os.path.exists(context.vector_store_path):
+                print(f"Skipping context {context.name} - vector store path does not exist: {context.vector_store_path}")
+                continue
+
             chunks = vector_service.search_similar(context.vector_store_path, query, top_k=5)
             print(f"Found {len(chunks)} chunks from context {context.name}")
 
@@ -478,6 +489,47 @@ def generate_response(query, contexts, session, user_message_id):
                     'source': chunk.get('source', ''),
                     'score': chunk.get('score', 0.0)
                 })
+        
+        # Check if we found any chunks from any context
+        if not all_chunks:
+            print(f"Warning: No chunks found from any of the {len(contexts)} selected contexts")
+            print("This might be because:")
+            print("1. No documents have been uploaded to these contexts yet")
+            print("2. The vector stores haven't been created yet")
+            print("3. The query doesn't match any content in the uploaded documents")
+            
+            # Create a response indicating no relevant context was found
+            no_context_response = f"""I don't have any information to answer your question about "{query}" because:
+
+• The selected context(s) don't contain any documents yet, or
+• No relevant information was found in the available documents
+
+To get better answers:
+1. Upload documents to your selected contexts
+2. Make sure the documents contain information relevant to your question
+3. Try rephrasing your question
+
+Selected contexts: {', '.join(context.name for context in contexts)}
+"""
+            
+            # Save a response indicating no context was available
+            assistant_message = Message(
+                session_id=session.id,
+                role='assistant',
+                content=no_context_response,
+                tokens_used=0,
+                model_used='system-message'
+            )
+            assistant_message.set_context_ids([c.id for c in contexts])
+            assistant_message.set_citations([])
+            
+            db.session.add(assistant_message)
+            db.session.commit()
+            
+            return {
+                'message': assistant_message.to_dict(),
+                'citations': []
+            }
         
         # Generate response using LLM
         response = llm_service.generate_response(
@@ -532,6 +584,18 @@ def generate_streaming_response(query, contexts, session, user_message_id):
 
         for context in contexts:
             print(f"Streaming - Searching context: {context.name} (ID: {context.id})")
+            
+            # Skip contexts that don't have vector stores yet
+            if not context.vector_store_path:
+                print(f"Streaming - Skipping context {context.name} - no vector store found (no documents uploaded yet)")
+                continue
+                
+            # Check if vector store actually exists
+            import os
+            if not os.path.exists(context.vector_store_path):
+                print(f"Streaming - Skipping context {context.name} - vector store path does not exist: {context.vector_store_path}")
+                continue
+                
             chunks = vector_service.search_similar(context.vector_store_path, query, top_k=5)
             print(f"Streaming - Found {len(chunks)} chunks from context {context.name}")
 
@@ -543,6 +607,45 @@ def generate_streaming_response(query, contexts, session, user_message_id):
                     'source': chunk.get('source', ''),
                     'score': chunk.get('score', 0.0)
                 })
+        
+        # Check if we found any chunks from any context
+        if not all_chunks:
+            print(f"Streaming - Warning: No chunks found from any of the {len(contexts)} selected contexts")
+            
+            # Create a response indicating no relevant context was found
+            no_context_response = f"""I don't have any information to answer your question about "{query}" because:
+
+• The selected context(s) don't contain any documents yet, or
+• No relevant information was found in the available documents
+
+To get better answers:
+1. Upload documents to your selected contexts
+2. Make sure the documents contain information relevant to your question
+3. Try rephrasing your question
+
+Selected contexts: {', '.join(context.name for context in contexts)}
+"""
+            
+            # Stream the no-context response
+            for char in no_context_response:
+                yield f"data: {json.dumps({'chunk': char})}\n\n"
+            
+            # Save the complete response
+            assistant_message = Message(
+                session_id=session.id,
+                role='assistant',
+                content=no_context_response,
+                model_used='system-message'
+            )
+            assistant_message.set_context_ids([c.id for c in contexts])
+            assistant_message.set_citations([])
+            
+            db.session.add(assistant_message)
+            db.session.commit()
+            
+            # Send final message with empty citations
+            yield f"data: {json.dumps({'done': True, 'citations': []})}\n\n"
+            return
         
         # Stream response
         full_response = ""

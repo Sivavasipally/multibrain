@@ -26,7 +26,7 @@ import {
   Storage as DatabaseIcon,
   Folder as FolderIcon,
 } from '@mui/icons-material';
-import { contextsAPI } from '../../services/api';
+import { contextsAPI, uploadAPI } from '../../services/api';
 import { useSnackbar } from '../../contexts/SnackbarContext';
 import RepositoryConfig from './RepositoryConfig';
 import DatabaseConfig from './DatabaseConfig';
@@ -123,22 +123,8 @@ const ContextWizard: React.FC<ContextWizardProps> = ({ open, onClose, onSuccess 
       // If files were selected, upload them
       if (contextData.source_type === 'files' && contextData.file_config?.files?.length > 0) {
         try {
-          const formData = new FormData();
-          formData.append('context_id', createdContext.id.toString());
-
-          // Add all selected files to FormData
-          contextData.file_config.files.forEach((file: File) => {
-            formData.append('files', file);
-          });
-
           // Upload files and process them
-          await fetch('http://localhost:5000/api/upload/files', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
-            },
-            body: formData,
-          });
+          await uploadAPI.uploadFiles(createdContext.id, contextData.file_config.files);
 
           showSuccess('Context created and files uploaded successfully!');
         } catch (uploadErr) {
