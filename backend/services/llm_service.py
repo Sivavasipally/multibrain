@@ -39,12 +39,17 @@ Version: 1.0.0
 
 import os
 import json
+import time
 from pathlib import Path
 from typing import List, Dict, Any, Generator, Optional
 import google.generativeai as genai
 
 # Import logging functionality
 from logging_config import get_logger, log_error_with_context
+from services.detailed_logger import (
+    detailed_logger, log_rag_operation, RAGOperationMetrics, 
+    track_operation
+)
 
 # Initialize logger
 logger = get_logger('llm_service')
@@ -165,93 +170,166 @@ class LLMService:
             raise Exception(error_msg)
     
     def generate_response(self, query: str, context_chunks: List[Dict[str, Any]], 
-                         chat_history: List[Dict[str, str]] = None) -> Dict[str, Any]:
+                         chat_history: List[Dict[str, str]] = None,
+                         operation_id: Optional[str] = None,
+                         user_id: Optional[int] = None,
+                         session_id: Optional[int] = None,
+                         contexts_searched: Optional[List[int]] = None) -> Dict[str, Any]:
         """
-        Generate AI response using RAG (Retrieval-Augmented Generation) methodology
+        Generate AI response using RAG methodology with comprehensive logging
         
-        This is the core method for generating context-aware responses by combining
-        user queries with retrieved information from the knowledge base. It implements
-        the RAG pattern by integrating relevant context chunks into the prompt.
-        
-        RAG Process:
-        1. Context Preparation: Format retrieved chunks with source attribution
-        2. Prompt Engineering: Create comprehensive prompt with context and history
-        3. Response Generation: Use Gemini model to generate contextual response
-        4. Token Estimation: Calculate approximate token usage for cost tracking
-        5. Result Packaging: Format response with metadata and statistics
+        Enhanced RAG implementation with detailed performance tracking and metrics
+        collection for monitoring LLM operations, token usage, and system performance.
         
         Args:
             query (str): User's question or request
             context_chunks (List[Dict[str, Any]]): Retrieved text chunks from vector search
             chat_history (List[Dict[str, str]], optional): Previous conversation messages
-                Format: [{'role': 'user'|'assistant', 'content': 'message'}]
+            operation_id (Optional[str]): Unique operation ID for tracking
+            user_id (Optional[int]): User ID for activity tracking
+            session_id (Optional[int]): Session ID for metrics
+            contexts_searched (Optional[List[int]]): List of context IDs searched
                 
         Returns:
-            Dict[str, Any]: Response object containing:
-                - content (str): Generated AI response text
-                - tokens_used (int): Approximate token consumption
-                - model_used (str): Gemini model identifier
-                - context_chunks_used (int): Number of context chunks utilized
-                - error (bool, optional): Present if generation failed
-                
-        Example:
-            >>> chunks = [{'content': 'Python is a programming language...', 'metadata': {...}}]
-            >>> history = [{'role': 'user', 'content': 'Hello'}, {'role': 'assistant', 'content': 'Hi!'}]
-            >>> response = llm.generate_response('What is Python?', chunks, history)
-            >>> print(f"Response: {response['content'][:100]}...")
-            
-        Error Handling:
-            - Returns error response instead of raising exceptions
-            - Logs detailed error information for debugging
-            - Maintains API consistency even during failures
+            Dict[str, Any]: Enhanced response with comprehensive metrics
         """
-        logger.info(f"Generating RAG response for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
-        logger.debug(f"Using {len(context_chunks)} context chunks, chat history: {len(chat_history) if chat_history else 0} messages")
+        # Generate operation ID if not provided
+        if not operation_id:
+            operation_id = detailed_logger.generate_operation_id()
+            
+        start_time = time.time()
         
-        try:
-            # Prepare context from retrieved chunks
-            logger.debug("Preparing context from retrieved chunks")
-            context = self._prepare_context(context_chunks)
+        with track_operation("llm_generate_response", 
+                           query_length=len(query), 
+                           chunks_count=len(context_chunks),
+                           model=self.model_name):
             
-            # Create RAG prompt with context and history
-            logger.debug("Creating RAG prompt with context integration")
-            prompt = self._create_rag_prompt(query, context, chat_history)
+            logger.info(f"Generating RAG response for query: '{query[:100]}{'...' if len(query) > 100 else ''}'")
             
-            # Generate response using Gemini
-            logger.debug(f"Generating response using {self.model_name}")
-            response = self.model.generate_content(prompt)
-            
-            # Calculate token usage for cost tracking
-            tokens_used = self._estimate_tokens(prompt + response.text)
-            response_length = len(response.text)
-            
-            logger.info(f"Generated response: {response_length} characters, ~{tokens_used} tokens")
-            
-            return {
-                'content': response.text,
-                'tokens_used': tokens_used,
-                'model_used': self.model_name,
-                'context_chunks_used': len(context_chunks)
-            }
+            try:
+                # Prepare context from retrieved chunks
+                context_start = time.time()
+                context = self._prepare_context(context_chunks)
+                context_time = time.time() - context_start
+                
+                # Create RAG prompt with context and history
+                prompt_start = time.time()
+                prompt = self._create_rag_prompt(query, context, chat_history)
+                prompt_time = time.time() - prompt_start
+                
+                # Generate response using Gemini
+                generation_start = time.time()
+                response = self.model.generate_content(prompt)
+                generation_time = time.time() - generation_start
+                
+                # Calculate comprehensive metrics
+                input_tokens = self._estimate_tokens(prompt)
+                output_tokens = self._estimate_tokens(response.text)
+                total_tokens = input_tokens + output_tokens
+                response_length = len(response.text)
+                total_time = time.time() - start_time
+                
+                # Log detailed LLM interaction
+                detailed_logger.log_llm_interaction(
+                    operation_id=operation_id,
+                    model=self.model_name,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    response_time=generation_time,
+                    prompt_type="rag_chat"
+                )
+                
+                # Create comprehensive RAG metrics if tracking data provided
+                if user_id and session_id and contexts_searched is not None:
+                    chunks_by_context = {}
+                    for chunk in context_chunks:
+                        ctx_id = str(chunk.get('context_id', 'unknown'))
+                        chunks_by_context[ctx_id] = chunks_by_context.get(ctx_id, 0) + 1
+                    
+                    rag_metrics = RAGOperationMetrics(
+                        operation_id=operation_id,
+                        user_id=user_id,
+                        session_id=session_id,
+                        query=query,
+                        contexts_searched=contexts_searched,
+                        total_chunks_retrieved=len(context_chunks),
+                        chunks_by_context=chunks_by_context,
+                        retrieval_time=0,  # Set by calling function
+                        llm_generation_time=generation_time,
+                        total_response_time=total_time,
+                        tokens_input=input_tokens,
+                        tokens_output=output_tokens,
+                        model_used=self.model_name,
+                        response_length=response_length,
+                        success=True
+                    )
+                    
+                    log_rag_operation(rag_metrics)
+                
+                logger.info(
+                    f"Enhanced context preparation completed: {len(context_chunks)} sources, "
+                    f"{len(context)} total characters"
+                )
+                logger.info(f"Generated response: {response_length} characters, ~{total_tokens} tokens")
+                
+                return {
+                    'content': response.text,
+                    'tokens_used': total_tokens,
+                    'model_used': self.model_name,
+                    'context_chunks_used': len(context_chunks),
+                    'operation_id': operation_id,
+                    'performance_metrics': {
+                        'context_prep_time': context_time,
+                        'prompt_creation_time': prompt_time,
+                        'generation_time': generation_time,
+                        'total_time': total_time,
+                        'tokens_per_second': output_tokens / generation_time if generation_time > 0 else 0
+                    }
+                }
         
-        except Exception as e:
-            error_msg = f"Error generating RAG response: {str(e)}"
-            logger.error(error_msg)
-            log_error_with_context(e, {
-                "query_length": len(query),
-                "context_chunks_count": len(context_chunks),
-                "model_name": self.model_name,
-                "has_chat_history": bool(chat_history)
-            })
-            
-            return {
-                'content': f"I apologize, but I encountered an error while processing your request. Please try again.",
-                'tokens_used': 0,
-                'model_used': self.model_name,
-                'context_chunks_used': len(context_chunks),
-                'error': True,
-                'error_message': str(e)
-            }
+            except Exception as e:
+                error_msg = f"Error generating RAG response: {str(e)}"
+                logger.error(error_msg)
+                
+                # Log failed RAG operation
+                if user_id and session_id and contexts_searched is not None:
+                    rag_metrics = RAGOperationMetrics(
+                        operation_id=operation_id,
+                        user_id=user_id,
+                        session_id=session_id,
+                        query=query,
+                        contexts_searched=contexts_searched,
+                        total_chunks_retrieved=len(context_chunks),
+                        chunks_by_context={},
+                        retrieval_time=0,
+                        llm_generation_time=0,
+                        total_response_time=time.time() - start_time,
+                        tokens_input=0,
+                        tokens_output=0,
+                        model_used=self.model_name,
+                        response_length=0,
+                        success=False,
+                        error_details=str(e)
+                    )
+                    log_rag_operation(rag_metrics)
+                
+                log_error_with_context(e, {
+                    "operation_id": operation_id,
+                    "query_length": len(query),
+                    "context_chunks_count": len(context_chunks),
+                    "model_name": self.model_name,
+                    "has_chat_history": bool(chat_history)
+                })
+                
+                return {
+                    'content': f"I apologize, but I encountered an error while processing your request. Please try again.",
+                    'tokens_used': 0,
+                    'model_used': self.model_name,
+                    'context_chunks_used': len(context_chunks),
+                    'operation_id': operation_id,
+                    'error': True,
+                    'error_message': str(e)
+                }
     
     def generate_streaming_response(self, query: str, context_chunks: List[Dict[str, Any]], 
                                   chat_history: List[Dict[str, str]] = None) -> Generator[str, None, None]:

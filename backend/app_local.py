@@ -2313,6 +2313,7 @@ def health_check():
 from routes.admin import admin_bp
 from routes.auth import auth_bp
 from routes.contexts import contexts_bp
+from routes.enhanced_contexts import enhanced_contexts_bp
 from routes.chat import chat_bp
 from routes.upload import upload_bp
 from routes.versions import versions_bp
@@ -2322,6 +2323,7 @@ from routes.preferences import preferences_bp
 app.register_blueprint(admin_bp, url_prefix='/api/admin')
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(contexts_bp, url_prefix='/api/contexts')
+app.register_blueprint(enhanced_contexts_bp, url_prefix='/api/contexts')
 app.register_blueprint(chat_bp, url_prefix='/api/chat')
 app.register_blueprint(upload_bp, url_prefix='/api/upload')
 app.register_blueprint(versions_bp, url_prefix='/api')

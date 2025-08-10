@@ -51,6 +51,7 @@ from services.vector_service import VectorService
 
 # Import logging functionality
 from logging_config import get_logger, log_error_with_context
+from services.detailed_logger import detailed_logger, track_operation
 
 # Initialize logger
 logger = get_logger('chat_routes')
@@ -347,9 +348,23 @@ def chat_query():
         stream = data.get('stream', False)
         max_results = data.get('max_results', 5)
         
-        # Log query details
+        # Log comprehensive query details and user activity
         logger.info(f"Processing RAG query from user {user_id}: session={session_id}, contexts={len(context_ids)}, stream={stream}")
         logger.debug(f"Query preview: '{message[:100]}{'...' if len(message) > 100 else ''}'")
+        
+        # Log user activity
+        detailed_logger.log_user_activity(
+            user_id=user_id,
+            session_id=session_id,
+            activity_type="chat_query",
+            details={
+                'message_length': len(message),
+                'context_ids': context_ids,
+                'streaming': stream,
+                'client_ip': client_ip,
+                'query_preview': message[:50] + ('...' if len(message) > 50 else '')
+            }
+        )
         
         # Validate and retrieve session
         session = ChatSession.query.filter_by(id=session_id, user_id=user_id).first()
@@ -478,8 +493,13 @@ def generate_response(query, contexts, session, user_message_id):
                 print(f"Skipping context {context.name} - vector store path does not exist: {context.vector_store_path}")
                 continue
 
-            chunks = vector_service.search_similar(context.vector_store_path, query, top_k=5)
-            print(f"Found {len(chunks)} chunks from context {context.name}")
+            chunks = vector_service.search_similar(
+                context.vector_store_path, 
+                query, 
+                top_k=5,
+                context_id=context.id
+            )
+            logger.info(f"Found {len(chunks)} chunks from context {context.name} (ID: {context.id})")
 
             for chunk in chunks:
                 all_chunks.append(chunk)
@@ -531,11 +551,14 @@ Selected contexts: {', '.join(context.name for context in contexts)}
                 'citations': []
             }
         
-        # Generate response using LLM
+        # Generate response using LLM with enhanced logging
         response = llm_service.generate_response(
             query=query,
             context_chunks=all_chunks,
-            chat_history=get_recent_messages(session.id)
+            chat_history=get_recent_messages(session.id),
+            user_id=session.user_id,
+            session_id=session.id,
+            contexts_searched=[ctx.id for ctx in contexts]
         )
         
         # Save assistant message

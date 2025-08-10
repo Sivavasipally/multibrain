@@ -1,18 +1,162 @@
-{
-  "chunks": [
-    {
-      "content": "Document: Client_Connect.docx\nFile Type: .docx\nFile Size: 22,336 bytes\nCategory: document\n\nThis .docx file contains structured or binary data that requires specialized processing.\nIn a full production implementation, this would be processed using:\n- PDF processors (PyMuPDF, pdfplumber) for PDF files\n- Office document parsers (python-docx, openpyxl) for Office files\n- Specialized parsers for other binary formats\n\nThe file is available for download and manual review if needed.",
-      "source": "Client_Connect.docx",
-      "chunk_index": 0,
-      "context_id": 3,
-      "metadata": {
-        "file_name": "Client_Connect.docx",
-        "file_type": "document",
-        "chunk_index": 0
-      }
+[
+  {
+    "context_id": 3,
+    "file_name": "README.md",
+    "chunk_index": 0,
+    "content": "# Markdown Document: README.md\n\n# Spring Boot Feign Client Example #\n\n## Technologies ##\n* [Spring Boot](https://spring.io/)\n\n## Prerequisites ##\n* [Git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)\n* [JDK](https://openjdk.java.net/)\n* [Gradle](https://gradle.org/)\n\n## Run this project ##\n1 . Clone project on your machine\n```\ngit clone https://github.com/BatuhanKucukali/feign-client-example\n```\n2 . Change directory\n```\ncd feign-client-example\n```\n3 . Run Tests\n```\n./gradlew clean test\n```\n\n## Getting help ##\n\nIf you're having trouble getting this project running, feel free to [open an issue](https://github.com/BatuhanKucukali/feign-client-example/issues/new) or [email me](mailto:mail@batuhankucukali.com)!",
+    "metadata": {
+      "file_path": "README.md",
+      "file_type": ".md",
+      "language": "unknown",
+      "chunk_size": 732,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
     }
-  ],
-  "embedding_model": "text-embedding-004",
-  "dimension": 768,
-  "total_chunks": 1
-}
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\main\\java\\com\\arch\\CurrencyNotFoundException.java",
+    "chunk_index": 0,
+    "content": "# Java File: CurrencyNotFoundException.java\n\n## Class: public class CurrencyNotFoundException extends RuntimeException {\n\n## Full Code:\n```java\npackage com.arch;\n\npublic class CurrencyNotFoundException extends RuntimeException {\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\java\\com\\arch\\CurrencyNotFoundException.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 235,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\main\\java\\com\\arch\\DemoApplication.java",
+    "chunk_index": 0,
+    "content": "# Java File: DemoApplication.java\n\n## Class: public class DemoApplication {\n## Method: public static void main(String[] args) {\n\n## Full Code:\n```java\npackage com.arch;\n\nimport org.springframework.boot.SpringApplication;\nimport org.springframework.boot.autoconfigure.SpringBootApplication;\nimport org.springframework.cloud.openfeign.EnableFeignClients;\n\n@SpringBootApplication\n@EnableFeignClients\npublic class DemoApplication {\n\n    public static void main(String[] args) {\n        SpringApplication.run(DemoApplication.class, args);\n    }\n\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\java\\com\\arch\\DemoApplication.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 547,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\main\\java\\com\\arch\\ExchangeRate.java",
+    "chunk_index": 0,
+    "content": "# Java File: ExchangeRate.java\n\n## Class: public class ExchangeRate {\n\n## Full Code:\n```java\npackage com.arch;\n\nimport lombok.Data;\n\nimport java.math.BigDecimal;\nimport java.time.LocalDate;\nimport java.util.Currency;\nimport java.util.Map;\n\n@Data\npublic class ExchangeRate {\n    private Currency base;\n    private LocalDate date;\n    private Map<Currency, BigDecimal> rates;\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\java\\com\\arch\\ExchangeRate.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 380,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\main\\java\\com\\arch\\ExchangeRateClient.java",
+    "chunk_index": 0,
+    "content": "# Java File: ExchangeRateClient.java\n\n\n## Full Code:\n```java\npackage com.arch;\n\nimport org.springframework.cloud.openfeign.FeignClient;\nimport org.springframework.format.annotation.DateTimeFormat;\nimport org.springframework.web.bind.annotation.GetMapping;\nimport org.springframework.web.bind.annotation.PathVariable;\nimport org.springframework.web.bind.annotation.RequestParam;\n\nimport java.time.LocalDate;\nimport java.util.Currency;\n\n@FeignClient(value = \"exchange-rate\", url = \"${feign.client.config.exchange-rate.url}\")\npublic interface ExchangeRateClient {\n\n    @GetMapping(value = \"/latest\")\n    ExchangeRate getLatest();\n\n    @GetMapping(value = \"/{date}\")\n    ExchangeRate getByDate(@PathVariable(\"date\") @DateTimeFormat(pattern = \"yyyy-MM-dd\") LocalDate date);\n\n    @GetMapping(value = \"/latest\")\n    ExchangeRate getByBaseCurrency(@RequestParam(value = \"base\") Currency currency);\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\java\\com\\arch\\ExchangeRateClient.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 896,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\main\\java\\com\\arch\\ExchangeRateClientErrorDecoder.java",
+    "chunk_index": 0,
+    "content": "# Java File: ExchangeRateClientErrorDecoder.java\n\n## Class: public class ExchangeRateClientErrorDecoder implements ErrorDecoder {\n## Method: public Exception decode(String methodKey, Response response) {\n\n## Full Code:\n```java\npackage com.arch;\n\nimport feign.Response;\nimport feign.codec.ErrorDecoder;\nimport lombok.extern.slf4j.Slf4j;\n\n@Slf4j\npublic class ExchangeRateClientErrorDecoder implements ErrorDecoder {\n    @Override\n    public Exception decode(String methodKey, Response response) {\n        log.info(\"Method : {}, Response: {}\", methodKey, response);\n\n        switch (response.status()) {\n            case 400:\n            case 404:\n                return new CurrencyNotFoundException();\n            default:\n                return new Exception(\"Generic error\");\n        }\n    }\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\java\\com\\arch\\ExchangeRateClientErrorDecoder.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 799,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\main\\java\\com\\arch\\ExchangeRateClientInterceptor.java",
+    "chunk_index": 0,
+    "content": "# Java File: ExchangeRateClientInterceptor.java\n\n## Class: public class ExchangeRateClientInterceptor implements RequestInterceptor {\n## Method: public void apply(RequestTemplate template) {\n\n## Full Code:\n```java\npackage com.arch;\n\nimport feign.RequestInterceptor;\nimport feign.RequestTemplate;\nimport lombok.extern.slf4j.Slf4j;\n\n@Slf4j\npublic class ExchangeRateClientInterceptor implements RequestInterceptor {\n    @Override\n    public void apply(RequestTemplate template) {\n        log.info(\"Request Url: {}\", template.url());\n    }\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\java\\com\\arch\\ExchangeRateClientInterceptor.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 542,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\main\\resources\\application.yml",
+    "chunk_index": 0,
+    "content": "# Configuration File: application.yml\nType: .YML\n\n## Configuration Content:\n```yml\n# Feign\nfeign:\n\n  # Client\n  client:\n    config:\n      exchange-rate:\n        url: https://api.exchangeratesapi.io\n        connectTimeout: 5000\n        readTimeout: 5000\n        loggerLevel: full\n        errorDecoder: com.arch.ExchangeRateClientErrorDecoder\n        requestInterceptors:\n          - com.arch.ExchangeRateClientInterceptor\n\n  # Compression\n  compression:\n    request:\n      enabled: true\n    response:\n      enabled: true\n\n# Logging\nlogging:\n  level:\n    com.arch:\n      ExchangeRateClient: DEBUG\n\n```",
+    "metadata": {
+      "file_path": "src\\main\\resources\\application.yml",
+      "file_type": ".yml",
+      "language": "unknown",
+      "chunk_size": 599,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\test\\java\\com\\arch\\ExchangeRateClientTests.java",
+    "chunk_index": 0,
+    "content": "# Java File: ExchangeRateClientTests.java\n\n## Class: public class ExchangeRateClientTests {\n## Documentation: // when\n## Documentation: // then\n## Documentation: // given\n## Documentation: // when\n## Documentation: // then\n## Documentation: // given\n## Documentation: // when\n## Documentation: // then\n## Documentation: // given\n## Documentation: // when & then\n\n## Full Code:\n```java\npackage com.arch;\n\nimport org.junit.jupiter.api.Assertions;\nimport org.junit.jupiter.api.Test;\nimport org.springframework.beans.factory.annotation.Autowired;\nimport org.springframework.boot.test.context.SpringBootTest;\n\nimport java.time.LocalDate;\nimport java.util.Currency;\n\nimport static org.junit.jupiter.api.Assertions.assertEquals;\nimport static org.junit.jupiter.api.Assertions.assertFalse;\n\n@SpringBootTest\npublic class ExchangeRateClientTests {\n\n    @Autowired\n    ExchangeRateClient client;\n\n    @Test\n    void itShouldReturnLatestCurrencyRates() {\n        // when\n        var result = client.getLatest();\n\n        // then\n        assertEquals(LocalDate.now().minusDays(1), result.getDate());\n        assertFalse(result.getRates().isEmpty());\n        assertEquals(32, result.getRates().size());\n    }\n\n    @Test\n    void itShouldReturnCurrencyRatesByDate() {\n        // given\n        LocalDate date = LocalDate.now().minusDays(5);\n\n        // when\n        var result = client.getByDate(date);\n\n        // then\n        assertEquals(date, result.getDate());\n        assertFalse(result.getRates().isEmpty());\n        assertEquals(32, result.getRates().size());\n    }\n\n    @Test",
+    "metadata": {
+      "file_path": "src\\test\\java\\com\\arch\\ExchangeRateClientTests.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 1568,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  },
+  {
+    "context_id": 3,
+    "file_name": "src\\test\\java\\com\\arch\\ExchangeRateClientTests.java",
+    "chunk_index": 1,
+    "content": "    void itShouldReturnCurrencyRatesByBaseCurrency() {\n        // given\n        Currency currency = Currency.getInstance(\"USD\");\n\n        // when\n        var result = client.getByBaseCurrency(currency);\n\n        // then\n        assertEquals(LocalDate.now().minusDays(1), result.getDate());\n        assertEquals(currency, result.getBase());\n        assertFalse(result.getRates().isEmpty());\n        assertEquals(33, result.getRates().size());\n    }\n\n    @Test\n    void itShouldThrowExceptionWhenCurrencyIsNotFound() {\n        // given\n        Currency currency = Currency.getInstance(\"KPW\");\n\n        // when & then\n        Assertions.assertThrows(CurrencyNotFoundException.class, () -> client.getByBaseCurrency(currency));\n    }\n}\n\n```",
+    "metadata": {
+      "file_path": "src\\test\\java\\com\\arch\\ExchangeRateClientTests.java",
+      "file_type": ".java",
+      "language": "java",
+      "chunk_size": 735,
+      "chunk_strategy": "language_specific",
+      "repository_url": "https://github.com/BatuhanKucukali/feign-client-example.git",
+      "repository_branch": "master",
+      "project_type": "Java/Gradle"
+    }
+  }
+]

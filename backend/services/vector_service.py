@@ -31,11 +31,16 @@ Version: 1.0.0
 import os
 import json
 import pickle
+import time
 import numpy as np
 from typing import List, Dict, Any, Optional
 
 # Import logging functionality
 from logging_config import get_logger, log_error_with_context
+from services.detailed_logger import (
+    detailed_logger, log_vector_operation, log_chunk_processing,
+    VectorOperationLog, ChunkMetadata, track_operation
+)
 
 # Initialize logger
 logger = get_logger('vector_service')
@@ -371,50 +376,135 @@ class VectorService:
             index = faiss.read_index(index_path)
             return index, metadata
     
-    def search_similar(self, store_path: str, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """Search for similar chunks in the vector store"""
-        try:
-            # Load vector store
-            index_or_embeddings, metadata = self.load_vector_store(store_path)
-
-            # Get the embedding model used for this vector store
-            store_embedding_model = metadata.get('embedding_model', 'text-embedding-004')
-            print(f"Vector store uses embedding model: {store_embedding_model}")
-            print(f"Total chunks in store: {len(metadata.get('chunks', []))}")
-
-            # Create query embedding using the same model as the store
-            query_embedding = self.create_query_embedding(query, store_embedding_model)
-
-            # Check store type
-            store_type = metadata.get('store_type', 'faiss')
-
-            if store_type == 'simple' or not FAISS_AVAILABLE:
-                # Simple similarity search using numpy
-                scores, indices = self._simple_search(query_embedding, index_or_embeddings, top_k)
-            else:
-                # FAISS search
-                scores, indices = index_or_embeddings.search(query_embedding, top_k)
-
-            # Prepare results
-            results = []
-            chunks = metadata['chunks']
-
-            for i, (score, idx) in enumerate(zip(scores[0] if len(scores.shape) > 1 else scores,
-                                               indices[0] if len(indices.shape) > 1 else indices)):
-                if idx < len(chunks):
-                    chunk = chunks[idx].copy()
-                    chunk['score'] = float(score)
-                    chunk['rank'] = i + 1
-                    # Add debug info about the chunk
-                    chunk_metadata = chunk.get('metadata', {})
-                    print(f"Retrieved chunk {i+1}: file_type={chunk_metadata.get('file_type', 'unknown')}, score={score:.4f}")
-                    results.append(chunk)
-
-            return results
-
-        except Exception as e:
-            print(f"Error searching vector store: {e}")
-            return []
+    def search_similar(self, store_path: str, query: str, top_k: int = 5, 
+                      context_id: Optional[int] = None,
+                      operation_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Search for similar chunks with detailed logging and metrics"""
+        
+        if not operation_id:
+            operation_id = detailed_logger.generate_operation_id()
+            
+        start_time = time.time()
+        
+        with track_operation("vector_search", 
+                           query_length=len(query),
+                           top_k=top_k, 
+                           store_path=store_path):
+            
+            try:
+                # Load vector store with timing
+                load_start = time.time()
+                index_or_embeddings, metadata = self.load_vector_store(store_path)
+                load_time = time.time() - load_start
+                
+                store_embedding_model = metadata.get('embedding_model', 'text-embedding-004')
+                total_chunks = len(metadata.get('chunks', []))
+                
+                logger.info(f"Vector store loaded: {total_chunks} chunks, model: {store_embedding_model}")
+                
+                # Create query embedding with timing
+                embed_start = time.time()
+                query_embedding = self.create_query_embedding(query, store_embedding_model)
+                embed_time = time.time() - embed_start
+                
+                # Perform search with timing
+                search_start = time.time()
+                store_type = metadata.get('store_type', 'faiss')
+                
+                if store_type == 'simple' or not FAISS_AVAILABLE:
+                    scores, indices = self._simple_search(query_embedding, index_or_embeddings, top_k)
+                else:
+                    scores, indices = index_or_embeddings.search(query_embedding, top_k)
+                
+                search_time = time.time() - search_start
+                
+                # Process results with detailed logging
+                results = []
+                chunks = metadata['chunks']
+                total_similarity = 0
+                
+                for i, (score, idx) in enumerate(zip(scores[0] if len(scores.shape) > 1 else scores,
+                                                   indices[0] if len(indices.shape) > 1 else indices)):
+                    if idx < len(chunks):
+                        chunk = chunks[idx].copy()
+                        chunk_score = float(score)
+                        chunk['score'] = chunk_score
+                        chunk['rank'] = i + 1
+                        
+                        # Log individual chunk retrieval
+                        chunk_metadata = chunk.get('metadata', {})
+                        logger.debug(f"Retrieved chunk {i+1}: {chunk.get('source', 'unknown')} "
+                                   f"score={chunk_score:.4f} size={len(chunk.get('content', ''))}")
+                        
+                        total_similarity += chunk_score
+                        results.append(chunk)
+                
+                total_time = time.time() - start_time
+                avg_similarity = total_similarity / len(results) if results else 0
+                
+                # Log comprehensive vector operation
+                vector_log = VectorOperationLog(
+                    operation_id=operation_id,
+                    operation_type="search",
+                    vector_store_path=store_path,
+                    context_id=context_id or 0,
+                    embedding_model=store_embedding_model,
+                    operation_time=total_time,
+                    search_query=query,
+                    top_k=top_k,
+                    results_count=len(results),
+                    average_similarity=avg_similarity,
+                    success=True
+                )
+                
+                log_vector_operation(vector_log)
+                
+                # Log performance breakdown
+                detailed_logger.log_performance_summary(operation_id, {
+                    'vector_store_load_time': load_time,
+                    'query_embedding_time': embed_time,
+                    'similarity_search_time': search_time,
+                    'total_search_time': total_time,
+                    'chunks_searched': total_chunks,
+                    'chunks_returned': len(results),
+                    'average_similarity_score': avg_similarity
+                })
+                
+                logger.info(f"Vector search completed: {len(results)} results in {total_time:.3f}s "
+                          f"(avg similarity: {avg_similarity:.4f})")
+                
+                return results
+                
+            except Exception as e:
+                total_time = time.time() - start_time
+                error_msg = f"Error searching vector store: {e}"
+                logger.error(error_msg)
+                
+                # Log failed vector operation
+                vector_log = VectorOperationLog(
+                    operation_id=operation_id,
+                    operation_type="search",
+                    vector_store_path=store_path,
+                    context_id=context_id or 0,
+                    embedding_model=self.embedding_model,
+                    operation_time=total_time,
+                    search_query=query,
+                    top_k=top_k,
+                    results_count=0,
+                    success=False,
+                    error_details=str(e)
+                )
+                
+                log_vector_operation(vector_log)
+                
+                log_error_with_context(e, {
+                    "operation_id": operation_id,
+                    "store_path": store_path,
+                    "query_length": len(query),
+                    "top_k": top_k
+                })
+                
+                return []
 
     def _simple_search(self, query_embedding: np.ndarray, embeddings: np.ndarray, top_k: int) -> tuple:
         """Simple similarity search using numpy (fallback when FAISS not available)"""
